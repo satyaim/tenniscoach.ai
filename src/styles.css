@@ -226,6 +226,95 @@ input:focus-visible + * {
   margin: 0.7rem 0 0;
 }
 
+.shot-progress-rail {
+  position: absolute;
+  right: 18px;
+  bottom: 54px;
+  left: 18px;
+  z-index: 5;
+  height: 10px;
+  background: rgba(1, 9, 6, 0.58);
+  border: 1px solid rgba(181, 255, 208, 0.18);
+  border-radius: 999px;
+}
+
+.shot-progress-segment {
+  position: absolute;
+  top: 1px;
+  height: 6px;
+  min-width: 5px;
+  padding: 0;
+  cursor: pointer;
+  background: rgba(103, 255, 123, 0.72);
+  border: 0;
+  border-radius: 999px;
+}
+
+.shot-progress-segment--review {
+  background: rgba(255, 199, 102, 0.72);
+}
+
+.shot-progress-segment--active {
+  background: #c9ffd6;
+  box-shadow: 0 0 0 2px rgba(103, 255, 123, 0.28);
+}
+
+.shot-progress-playhead {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 14px;
+  pointer-events: none;
+  background: #fff;
+  border-radius: 999px;
+  transform: translateX(-1px);
+}
+
+.shot-list {
+  margin-top: 18px;
+  text-align: left;
+}
+
+.shot-list h2 {
+  margin: 0 0 10px;
+  font-family: 'Manrope', sans-serif;
+  font-size: 1rem;
+}
+
+.shot-list > div {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 9px;
+}
+
+.shot-list button {
+  display: grid;
+  gap: 3px;
+  padding: 11px 13px;
+  color: #dfeae4;
+  text-align: left;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(181, 255, 208, 0.14);
+  border-radius: 12px;
+}
+
+.shot-list button:hover,
+.shot-list button.is-active {
+  background: rgba(103, 255, 123, 0.08);
+  border-color: rgba(103, 255, 123, 0.55);
+}
+
+.shot-list span,
+.shot-list small {
+  color: #91a39a;
+  font-size: 0.74rem;
+}
+
+.shot-list small {
+  color: #ffc978;
+}
+
 .viewer-badge {
   position: absolute;
   top: 14px;

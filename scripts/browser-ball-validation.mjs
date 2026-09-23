@@ -1,7 +1,9 @@
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync } from 'node:fs'
+import { once } from 'node:events'
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
+import { tmpdir } from 'node:os'
 import process from 'node:process'
 import { chromium } from 'playwright-core'
 
@@ -16,7 +18,7 @@ const knownClips = [
   args.get('--known-2'),
   args.get('--known-3'),
 ]
-const unknownClip = args.get('--unknown')
+let unknownClip = args.get('--unknown')
 if (
   !manifestPath
   || !existsSync(manifestPath)
@@ -54,8 +56,16 @@ const known = knownClips.map((path) => {
     throw new Error(`Track digest does not match for ${sha256}.`)
   }
   const track = JSON.parse(trackBytes.toString('utf8'))
-  const observed = track.frames.find((frame) => frame.s === 'observed')
-  const gap = track.frames.find((frame) => frame.s !== 'observed')
+  const observed = track.frames.find((frame, index, frames) =>
+    frame.s === 'observed'
+    && frames[index - 1]?.s === 'observed'
+    && frames[index + 1]?.s === 'observed')
+    ?? track.frames.find((frame) => frame.s === 'observed')
+  const gap = track.frames.find((frame, index, frames) =>
+    frame.s !== 'observed'
+    && frames[index - 1]?.s !== 'observed'
+    && frames[index + 1]?.s !== 'observed')
+    ?? track.frames.find((frame) => frame.s !== 'observed')
   if (!observed || !gap) throw new Error(`Track ${sha256} needs observed and non-observed frames.`)
   return { path, sha256, entry, track, observed, gap }
 })
@@ -64,6 +74,7 @@ if (manifest.entries[fileSha256(unknownClip)]) {
 }
 
 const baseUrl = 'http://127.0.0.1:5175/'
+let renamedUnknownDirectory
 const server = spawn(process.execPath, [
   join(process.cwd(), 'node_modules', 'vite', 'bin', 'vite.js'),
   '--host', '127.0.0.1',
@@ -106,6 +117,11 @@ const waitForPose = async (page) => {
   }
 }
 
+const openApp = (page) => page.goto(baseUrl, {
+  waitUntil: 'domcontentloaded',
+  timeout: 60_000,
+})
+
 const seek = async (page, timestampMs) => {
   await page.getByLabel('Analyzed tennis video').evaluate(async (video, time) => {
     video.currentTime = Math.max(0, Math.min(video.duration, time / 1000))
@@ -125,7 +141,13 @@ const paintedPixels = (page) => page.getByLabel('Precomputed observed ball overl
   return painted
 })
 
-const installArtifactRoutes = async (context) => {
+const waitForBallMessage = async (page) => {
+  const message = page.locator('.ball-availability')
+  await message.waitFor({ timeout: 30_000 })
+  return message.textContent()
+}
+
+const installArtifactRoutes = async (context, tamperedTrackPath) => {
   await context.route('**/ball-tracks/**', async (route) => {
     const path = new URL(route.request().url()).pathname
     if (path.endsWith('/manifest.json') || path.endsWith('/manifest.v1.json')) {
@@ -139,10 +161,12 @@ const installArtifactRoutes = async (context) => {
       await route.fulfill({ status: 404, body: 'not found' })
       return
     }
+    const body = readFileSync(join(artifactDirectory, entry.track.path))
+    if (entry.track.path === tamperedTrackPath) body[0] ^= 1
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: readFileSync(join(artifactDirectory, entry.track.path)),
+      body,
     })
   })
 }
@@ -162,19 +186,15 @@ const runBrowser = async (name, executablePath) => {
   const page = await context.newPage()
   const evidence = []
   try {
-    await page.goto(baseUrl)
+    await openApp(page)
     for (const [index, item] of known.entries()) {
       if (index > 0) await page.getByRole('button', { name: 'Upload another video' }).click()
       const started = performance.now()
       await page.getByLabel('Upload tennis video').setInputFiles(item.path)
       await waitForPose(page)
       const poseReadyMs = performance.now() - started
-      await page.getByText(
-        'Precomputed ball observations are available for this exact video.',
-        { exact: true },
-      ).waitFor({ timeout: 30_000 })
+      await page.getByLabel('Precomputed observed ball overlay').waitFor({ timeout: 30_000 })
       const ballReadyMs = performance.now() - started
-      await page.getByLabel('Precomputed observed ball overlay').waitFor()
 
       await seek(page, item.observed.t)
       const observedPixels = await paintedPixels(page)
@@ -196,6 +216,12 @@ const runBrowser = async (name, executablePath) => {
       if (Math.abs(geometry.intrinsicRatio - geometry.displayRatio) > 0.02) {
         throw new Error(`${name}: contain geometry changed source aspect ratio.`)
       }
+      const shotCount = await page.locator('.shot-list button').count()
+      const timelineShotCount = await page.locator('.shot-progress-segment').count()
+      if (shotCount !== timelineShotCount) {
+        throw new Error(`${name}: shot list and timeline segment counts differ.`)
+      }
+      if (shotCount) await page.locator('.shot-list button').first().click()
       evidence.push({
         sourceSha256: item.sha256,
         orientation: item.entry.source.height > item.entry.source.width ? 'portrait' : 'landscape',
@@ -203,24 +229,67 @@ const runBrowser = async (name, executablePath) => {
         poseReadyMs: Math.round(poseReadyMs),
         ballReadyMs: Math.round(ballReadyMs),
         ballAfterPoseMs: Math.max(0, Math.round(ballReadyMs - poseReadyMs)),
+        shotCount,
       })
+    }
+    if (!evidence.some(({ shotCount }) => shotCount > 0)) {
+      throw new Error(`${name}: no combined pose/ball shot segments were displayed.`)
     }
 
     await page.getByRole('button', { name: 'Upload another video' }).click()
     await page.getByLabel('Upload tennis video').setInputFiles(unknownClip)
     await waitForPose(page)
-    await page.getByText(
-      'Ball visualization is not available for this exact video.',
-      { exact: true },
-    ).waitFor({ timeout: 30_000 })
+    const unknownMessage = await waitForBallMessage(page)
+    if (unknownMessage !== 'Ball visualization is not available for this exact video.') {
+      throw new Error(`${name}: unknown source did not use pose-only fallback: ${unknownMessage}`)
+    }
     if (await page.getByLabel('Precomputed observed ball overlay').count()) {
       throw new Error(`${name}: unknown source rendered a ball overlay.`)
     }
+    await page.getByLabel('Analyzed tennis video').waitFor()
     const revokedObjectUrls = await page.evaluate(() => window.__revokedObjectUrls.length)
     if (revokedObjectUrls < known.length) {
       throw new Error(`${name}: replacements did not revoke prior object URLs.`)
     }
-    return { name, evidence, unknownPoseOnly: true, revokedObjectUrls }
+    const digestContext = await browser.newContext({ viewport: { width: 1280, height: 900 } })
+    await installArtifactRoutes(digestContext, known[0].entry.track.path)
+    const digestPage = await digestContext.newPage()
+    const digestStarted = performance.now()
+    await openApp(digestPage)
+    await digestPage.getByLabel('Upload tennis video').setInputFiles(known[0].path)
+    await waitForPose(digestPage)
+    await digestPage.getByText(/failed SHA-256 verification/).waitFor({ timeout: 30_000 })
+    await digestPage.getByLabel('Analyzed tennis video').waitFor()
+    if (await digestPage.getByLabel('Precomputed observed ball overlay').count()) {
+      throw new Error(`${name}: digest failure rendered a ball overlay.`)
+    }
+    const digestFailureMs = Math.round(performance.now() - digestStarted)
+    await digestContext.close()
+
+    const cancelContext = await browser.newContext({ viewport: { width: 1280, height: 900 } })
+    await installArtifactRoutes(cancelContext)
+    await cancelContext.route('**/models/pose_landmarker_lite-float16-v1.task', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 1500))
+      await route.continue()
+    })
+    const cancelPage = await cancelContext.newPage()
+    await openApp(cancelPage)
+    await cancelPage.getByLabel('Upload tennis video').setInputFiles(known[0].path)
+    await cancelPage.getByText(/Loading the pose model/).waitFor({ timeout: 60_000 })
+    await cancelPage.getByRole('button', { name: 'Cancel analysis' }).click()
+    await cancelPage.getByRole('heading', { name: 'Your video is still available' }).waitFor()
+    await cancelPage.getByLabel('Uploaded tennis video').waitFor()
+    await cancelContext.close()
+
+    return {
+      name,
+      evidence,
+      unknownPoseOnly: true,
+      digestFailurePlaybackVisible: true,
+      digestFailureMs,
+      cancellationPlaybackVisible: true,
+      revokedObjectUrls,
+    }
   } finally {
     await context.close()
     await browser.close()
@@ -229,6 +298,10 @@ const runBrowser = async (name, executablePath) => {
 
 try {
   await waitForServer()
+  renamedUnknownDirectory = mkdtempSync(join(tmpdir(), 'tenniscoach-ball-unknown-'))
+  const renamedUnknown = join(renamedUnknownDirectory, basename(known[0].path))
+  copyFileSync(unknownClip, renamedUnknown)
+  unknownClip = renamedUnknown
   const results = []
   for (const [name, executablePath] of browserTargets) {
     results.push(await runBrowser(name, executablePath))
@@ -239,6 +312,12 @@ try {
     results,
   }, null, 2))
 } finally {
-  server.kill()
+  if (server.exitCode === null) server.kill()
+  await Promise.race([
+    once(server, 'exit'),
+    new Promise((resolve) => setTimeout(resolve, 2_000)),
+  ])
+  if (renamedUnknownDirectory) {
+    rmSync(renamedUnknownDirectory, { recursive: true, force: true })
+  }
 }
-

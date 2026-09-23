@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { containVideoRect } from '../analysis/videoGeometry'
 import type { PrecomputedBallTrack } from '../analysis/precomputedBallTrack'
-import type { PoseFrame } from '../analysis/types'
+import type { PoseFrame, StrokeSegment } from '../analysis/types'
 import { BallOverlay } from './BallOverlay'
+import { ShotProgressRail } from './ShotSegments'
 
 const VISIBILITY_THRESHOLD = 0.45
 const CONNECTIONS = [
@@ -135,6 +136,10 @@ interface PoseViewerProps {
   primaryPlayerLabel?: string
   secondaryPlayerLabel?: string
   ballTrack?: PrecomputedBallTrack
+  showBadge?: boolean
+  shotSegments?: StrokeSegment[]
+  currentTimeMs?: number
+  shotPlayerLabel?: string
 }
 
 export function PoseViewer({
@@ -149,6 +154,10 @@ export function PoseViewer({
   primaryPlayerLabel,
   secondaryPlayerLabel,
   ballTrack,
+  showBadge = true,
+  shotSegments = [],
+  currentTimeMs = 0,
+  shotPlayerLabel,
 }: PoseViewerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const [presentedTimestampMs, setPresentedTimestampMs] = useState(0)
@@ -183,6 +192,15 @@ export function PoseViewer({
     setPresentedTimestampMs(0)
     setBallResetToken((token) => token + 1)
   }, [videoUrl])
+
+  const selectShot = (segment: StrokeSegment) => {
+    const video = videoRef.current
+    if (!video) return
+    video.currentTime = segment.onsetMs / 1000
+    setBallResetToken((token) => token + 1)
+    setPresentedTimestampMs(segment.onsetMs)
+    onTimeUpdate?.(segment.onsetMs)
+  }
 
   return (
     <div
@@ -237,10 +255,21 @@ export function PoseViewer({
           resetToken={ballResetToken}
         />
       )}
-      <div className="viewer-badge">
-        <span className="live-dot" />
-        {label}
-      </div>
+      <ShotProgressRail
+        segments={shotSegments}
+        durationMs={Math.max(1, videoRef.current?.duration
+          ? videoRef.current.duration * 1000
+          : ballTrack?.timeline.durationMs ?? 1)}
+        currentTimeMs={currentTimeMs}
+        onSelect={selectShot}
+        playerLabel={shotPlayerLabel}
+      />
+      {showBadge && (
+        <div className="viewer-badge">
+          <span className="live-dot" />
+          {label}
+        </div>
+      )}
     </div>
   )
 }

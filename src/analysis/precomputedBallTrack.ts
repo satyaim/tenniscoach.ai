@@ -124,6 +124,13 @@ interface UnavailableBallManifestEntry {
 
 export interface PrecomputedBallManifest {
   schemaVersion: typeof PRECOMPUTED_BALL_MANIFEST_VERSION
+  artifactPurpose: string
+  limitations: string[]
+  identity: {
+    entryKey: 'full source-file SHA-256'
+    trackDigestAlgorithm: 'SHA-256'
+    deterministicEncoding: 'UTF-8 JSON with stable insertion order and one trailing newline'
+  }
   entries: Record<string, AvailableBallManifestEntry | UnavailableBallManifestEntry>
 }
 
@@ -306,8 +313,22 @@ const parseAvailableEntry = (value: Record<string, unknown>): AvailableBallManif
 export const parseBallManifest = (value: unknown): PrecomputedBallManifest => {
   if (
     !isRecord(value)
-    || !hasOnlyKeys(value, ['schemaVersion', 'entries'])
+    || !hasOnlyKeys(value, [
+      'schemaVersion', 'artifactPurpose', 'limitations', 'identity', 'entries',
+    ])
     || value.schemaVersion !== PRECOMPUTED_BALL_MANIFEST_VERSION
+    || typeof value.artifactPurpose !== 'string'
+    || !Array.isArray(value.limitations)
+    || !value.limitations.length
+    || !value.limitations.every((limitation) => typeof limitation === 'string')
+    || !isRecord(value.identity)
+    || !hasOnlyKeys(value.identity, [
+      'entryKey', 'trackDigestAlgorithm', 'deterministicEncoding',
+    ])
+    || value.identity.entryKey !== 'full source-file SHA-256'
+    || value.identity.trackDigestAlgorithm !== 'SHA-256'
+    || value.identity.deterministicEncoding
+      !== 'UTF-8 JSON with stable insertion order and one trailing newline'
     || !isRecord(value.entries)
   ) throw new Error('The precomputed ball manifest has an unsupported or invalid schema.')
 
@@ -350,7 +371,13 @@ export const parseBallManifest = (value: unknown): PrecomputedBallManifest => {
     ) throw new Error('The precomputed ball manifest contains an invalid unavailable entry.')
     entries[hash] = candidate as unknown as UnavailableBallManifestEntry
   }
-  return { schemaVersion: PRECOMPUTED_BALL_MANIFEST_VERSION, entries }
+  return {
+    schemaVersion: PRECOMPUTED_BALL_MANIFEST_VERSION,
+    artifactPurpose: value.artifactPurpose,
+    limitations: value.limitations as string[],
+    identity: value.identity as PrecomputedBallManifest['identity'],
+    entries,
+  }
 }
 
 const parseEvidence = (value: unknown) => {

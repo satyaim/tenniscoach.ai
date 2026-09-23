@@ -28,6 +28,13 @@ movement observations linked to visible pose evidence.
   drawn as a green marker with a short raw-observation trail. Ambiguous and
   abstained frames render no coordinate and reset the trail. This is precomputed
   demo evidence, not live ball inference.
+- **Shot navigation when both signals exist:** pose-derived movement segments
+  that overlap a direct observed ball coordinate appear as clickable ranges on
+  the video timeline and as a compact shot list below the replay. Provisional
+  boundaries remain visibly marked for review and do not become contact or
+  stroke-classification claims. Shot ranges use the same selected player shown
+  by the pose overlay and require observed ball evidence inside that player’s
+  active onset-to-offset movement window.
 - **Evidence-linked feedback:** visible image-plane posture and movement
   observations include evidence, reliability, and explicit abstention.
 - **Automatic primary player:** the most stable/near player track is selected

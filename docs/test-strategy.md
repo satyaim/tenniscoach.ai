@@ -45,6 +45,7 @@ Privacy leakage, unsupported coaching claims, timestamp poisoning across videos,
 | Precomputed ball loading requires exact source SHA-256 plus matching bytes/duration/geometry, tries the stable manifest before the frozen v1 fallback, and verifies exact track bytes and SHA-256. | `src\analysis\precomputedBallTrack.test.ts` |
 | Illegal schemas, coordinate-bearing ambiguous/abstained frames, digest failures, cancellation, stale runs, and independently revisioned ball-cache reuse fail closed without hiding pose playback. | `src\analysis\precomputedBallTrack.test.ts`, `src\App.test.tsx` |
 | Ball frame selection is nearest and bounded; marker radius and observed-only trail limits/reset rules are deterministic. | `src\analysis\ballOverlayModel.test.ts`, `src\components\BallOverlay.test.tsx` |
+| Shot navigation appears only when a pose-derived movement segment overlaps direct observed ball evidence; timeline and list controls seek to the selected range. | `src\components\ShotSegments.test.tsx`, `src\App.test.tsx` |
 
 ## Current release boundary
 

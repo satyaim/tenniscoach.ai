@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
-  CheckCircle2,
   RotateCcw,
   Settings,
-  ShieldCheck,
   Upload,
   Video,
   X,
@@ -15,6 +13,7 @@ import {
   loadPrecomputedBallTrack,
   type BallTrackLoadResult,
 } from './analysis/precomputedBallTrack'
+import { shotSegmentsWithBallEvidence } from './analysis/shotSegments'
 import { poseFrameAtTime, trackedPoseFrameAtTime } from './analysis/overlayModel'
 import {
   analyzePoseFrames,
@@ -23,19 +22,13 @@ import {
   type VideoAnalysisOutput,
   type VideoAnalysisProgress,
 } from './analysis/videoAnalysisPipeline'
-import type { MeasuredObservation } from './analysis/types'
 import { PoseViewer } from './components/PoseViewer'
+import { ShotList } from './components/ShotSegments'
 
 type Screen = 'upload' | 'processing' | 'analysis'
 
 const MAX_FILE_BYTES = 200 * 1024 * 1024
 const MAX_DURATION_SECONDS = 30
-
-const stateLabel = (state: MeasuredObservation['state']) => {
-  if (state === 'not_observable') return 'Unavailable'
-  if (state === 'not_applicable') return 'Not applicable'
-  return state.charAt(0).toUpperCase() + state.slice(1)
-}
 
 const errorMessage = (error: unknown) => {
   if (error instanceof DOMException && error.name === 'AbortError') return 'Analysis cancelled. Your video is still available.'
@@ -267,21 +260,25 @@ export default function App() {
     }
   }, [currentTimeMs, output])
 
-  const seekToObservation = (observation: MeasuredObservation) => {
-    if (!readyOutput || !playbackVideoRef.current) return
-    const momentId =
-      observation.id === 'preparation'
-        ? 'preparation'
-        : observation.id === 'postPeakPath'
-          ? 'offset'
-          : 'peak'
-    const moment = readyOutput.result.moments.find((candidate) => candidate.id === momentId)
-    if (!moment) return
-    playbackVideoRef.current.currentTime = moment.timestampMs / 1000
-    setCurrentTimeMs(moment.timestampMs)
-  }
-
   const showSettings = Boolean(videoUrl)
+  const visibleBallMessage =
+    ballTrackResult?.status === 'unavailable'
+    || ballMessage?.startsWith('Ball visualization unavailable:')
+      ? ballMessage
+      : undefined
+  const shotSegments = useMemo(
+    () => shotSegmentsWithBallEvidence(
+      readyOutput?.segments ?? [],
+      ballTrackResult?.status === 'available' ? ballTrackResult.track : undefined,
+    ),
+    [ballTrackResult, readyOutput?.segments],
+  )
+  const selectShot = (startMs: number) => {
+    const video = playbackVideoRef.current
+    if (!video) return
+    video.currentTime = startMs / 1000
+    setCurrentTimeMs(startMs)
+  }
 
   return (
     <main className="app-shell">
@@ -338,7 +335,6 @@ export default function App() {
 
       {screen === 'upload' ? (
         <section className="upload-view" aria-labelledby="hero-title">
-          <p className="eyebrow">PRIVATE VIDEO REVIEW</p>
           <h1 id="hero-title">Your personal tennis coach</h1>
           <p className="hero-copy">
             Choose a short tennis clip to review visible posture and movement.
@@ -358,10 +354,6 @@ export default function App() {
           </label>
 
           {error && <p className="inline-error" role="alert">{error}</p>}
-          <p className="privacy-note">
-            <ShieldCheck size={16} aria-hidden="true" />
-            Your selected video stays in this browser and is not uploaded.
-          </p>
         </section>
       ) : screen === 'processing' ? (
         <section className="processing-view" aria-labelledby="processing-title" aria-live="polite">
@@ -418,41 +410,20 @@ export default function App() {
                 onVideoRef={(video) => { playbackVideoRef.current = video }}
                 onTimeUpdate={setCurrentTimeMs}
                 ballTrack={ballTrackResult?.status === 'available' ? ballTrackResult.track : undefined}
+                showBadge={false}
+                shotSegments={shotSegments}
+                currentTimeMs={currentTimeMs}
+                shotPlayerLabel={`Player ${readyOutput.selectedPlayerId}`}
               />
-              <div className="analysis-meta" aria-label="Analysis details">
-                <span>
-                  <CheckCircle2 size={16} /> Player {readyOutput.selectedPlayerId} tracked
-                  {readyOutput.result.playerSelection?.recommendationBand === 'insufficient' ? ' (review in settings)' : ''}
-                </span>
-                <span>{readyOutput.result.poseTrackQuality} pose evidence</span>
-                <span>{readyOutput.cacheStatus === 'hit' ? 'reused local analysis' : 'analyzed locally'}</span>
-              </div>
-              {ballMessage && (
-                <p className="ball-availability" role="status">{ballMessage}</p>
+              {visibleBallMessage && (
+                <p className="ball-availability" role="status">{visibleBallMessage}</p>
               )}
-              <div className="observation-grid">
-                {readyOutput.result.observations.map((observation) => (
-                  <button
-                    type="button"
-                    className="observation-card"
-                    key={observation.id}
-                    onClick={() => seekToObservation(observation)}
-                  >
-                    <span className={`observation-state observation-state--${observation.state}`}>
-                      {stateLabel(observation.state)}
-                    </span>
-                    <strong>{observation.label}</strong>
-                    <p>{observation.description}</p>
-                    <small>{observation.evidenceBasis}</small>
-                    {observation.abstentionReason && <em>{observation.abstentionReason}</em>}
-                  </button>
-                ))}
-              </div>
-              <p className="limitations-note">
-                {ballTrackResult?.status === 'available'
-                  ? 'Ball marks are precomputed observed coordinates for this exact video; no live ball inference, smoothing, prediction, contact, speed, spin, or outcome is shown.'
-                  : 'Pose-only review: ball, racket, contact timing, force, and true weight transfer are not measured.'}
-              </p>
+              <ShotList
+                segments={shotSegments}
+                currentTimeMs={currentTimeMs}
+                onSelect={(segment) => selectShot(segment.onsetMs)}
+                playerLabel={`Player ${readyOutput.selectedPlayerId}`}
+              />
             </>
           ) : output?.status === 'selection-required' ? (
             <>
@@ -468,8 +439,8 @@ export default function App() {
                 onTimeUpdate={setCurrentTimeMs}
                 ballTrack={ballTrackResult?.status === 'available' ? ballTrackResult.track : undefined}
               />
-              {ballMessage && (
-                <p className="ball-availability" role="status">{ballMessage}</p>
+              {visibleBallMessage && (
+                <p className="ball-availability" role="status">{visibleBallMessage}</p>
               )}
               <div className="player-selection-card" role="status">
                 <Settings size={24} aria-hidden="true" />

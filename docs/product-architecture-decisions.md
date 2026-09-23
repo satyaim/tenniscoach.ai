@@ -137,6 +137,12 @@ Video stays local. The exact MediaPipe WASM runtime is fetched from its pinned j
 
 The active upload renderer uses DPR-aware canvases over the intrinsic video aspect ratio. It draws the explicitly selected player's nearest eligible pose frame only, with a bounded timestamp tolerance and no landmark interpolation. Primary pose evidence is cyan; magenta is reserved for an intentionally requested secondary track and is not shown in the default analysis. Landmarks below 0.45 visibility are omitted. Joints are circular four-source-pixel marks and limbs are rounded semi-transparent four-source-pixel strokes, including eligible ankle/heel/toe links. Stale overlays are suppressed.
 
+When verified ball evidence is also available, pose-derived movement segments for
+that same selected player become timeline ranges and a clickable list only when
+an `observed` ball coordinate falls inside the segment's active onset-to-offset
+window. Selecting a range seeks to its onset. This temporal overlap supports
+navigation only; it does not identify physical contact or classify the stroke.
+
 For an exact verified known source, a separate canvas selects the canonical
 BallTrack frame by source timeline and renders only `observed` coordinates.
 `ambiguous` and `abstained` states contain no coordinate and clear the trail.

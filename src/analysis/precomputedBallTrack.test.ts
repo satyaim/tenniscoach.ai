@@ -93,6 +93,13 @@ const createFixture = async () => {
   }
   const manifest = {
     schemaVersion: 'precomputed-ball-tracks.v1',
+    artifactPurpose: 'Precomputed test evidence.',
+    limitations: ['Test-only fixture.'],
+    identity: {
+      entryKey: 'full source-file SHA-256',
+      trackDigestAlgorithm: 'SHA-256',
+      deterministicEncoding: 'UTF-8 JSON with stable insertion order and one trailing newline',
+    },
     entries: { [sourceHash]: entry },
   }
   return { trackBlob, entry, manifest }

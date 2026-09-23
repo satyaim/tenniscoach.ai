@@ -6,7 +6,10 @@ import {
   runVideoAnalysis,
   type VideoAnalysisOutput,
 } from './analysis/videoAnalysisPipeline'
-import { loadPrecomputedBallTrack } from './analysis/precomputedBallTrack'
+import {
+  loadPrecomputedBallTrack,
+  type PrecomputedBallTrack,
+} from './analysis/precomputedBallTrack'
 
 vi.mock('./analysis/videoAnalysisPipeline', async () => {
   const actual = await vi.importActual<typeof import('./analysis/videoAnalysisPipeline')>(
@@ -137,6 +140,44 @@ const analysisOutput = {
   },
 } as unknown as VideoAnalysisOutput
 const readyAnalysisOutput = analysisOutput as Extract<VideoAnalysisOutput, { status: 'ready' }>
+const shotSegment = {
+  ...readyAnalysisOutput.result.segment,
+  id: 'shot-segment-1',
+  startMs: 500,
+  onsetMs: 650,
+  peakMs: 1000,
+  offsetMs: 1350,
+  endMs: 1500,
+}
+const analysisWithShot = {
+  ...readyAnalysisOutput,
+  segments: [shotSegment],
+}
+const observedBallTrack: PrecomputedBallTrack = {
+  schemaVersion: 'precomputed-ball-track.v1',
+  sourceSha256: 'a'.repeat(64),
+  coordinateSpace: {
+    kind: 'intrinsic-source-pixels',
+    origin: 'top-left',
+    xDirection: 'right',
+    yDirection: 'down',
+    width: 1280,
+    height: 720,
+  },
+  timeline: {
+    frameIndexOrigin: 0,
+    timestampRule: 'frameIndex * 1000 / sourceFps',
+    fps: 2,
+    frameCount: 4,
+    durationMs: 2000,
+  },
+  frames: [
+    { i: 0, t: 0, s: 'abstained' },
+    { i: 1, t: 500, s: 'observed', x: 600, y: 300 },
+    { i: 2, t: 1000, s: 'observed', x: 620, y: 290 },
+    { i: 3, t: 1500, s: 'abstained' },
+  ],
+}
 
 const selectionOutput = {
   status: 'selection-required',
@@ -221,7 +262,8 @@ describe('real local video analysis flow', () => {
 
     expect(await screen.findByRole('heading', { name: 'Your tennis analysis' })).toBeInTheDocument()
     expect(screen.getByLabelText('Analyzed tennis video')).toHaveAttribute('src', 'blob:test-video')
-    expect(screen.getByText('Pelvis projection relative to visible ankle span')).toBeInTheDocument()
+    expect(screen.queryByText('Pelvis projection relative to visible ankle span')).not.toBeInTheDocument()
+    expect(screen.queryByText('Local pose overlay')).not.toBeInTheDocument()
     expect(screen.queryByText('Prepared sample')).not.toBeInTheDocument()
     expect(runVideoAnalysis).toHaveBeenCalledTimes(1)
     expect(await screen.findByRole('status')).toHaveTextContent(
@@ -238,6 +280,7 @@ describe('real local video analysis flow', () => {
         status: 'unavailable',
         message: 'Second video has no exact precomputed ball track.',
       })
+
     render(<App />)
     uploadAndLoadMetadata()
     await screen.findByRole('heading', { name: 'Your tennis analysis' })
@@ -254,6 +297,25 @@ describe('real local video analysis flow', () => {
       'Second video has no exact precomputed ball track.',
     )
     expect(screen.queryByText('Stale first-video result.')).not.toBeInTheDocument()
+  })
+
+  it('shows clickable shot segments only when pose and observed ball evidence overlap', async () => {
+    vi.mocked(runVideoAnalysis).mockResolvedValueOnce(analysisWithShot)
+    vi.mocked(loadPrecomputedBallTrack).mockResolvedValueOnce({
+      status: 'available',
+      track: observedBallTrack,
+      entry: {} as never,
+      cacheIdentity: 'ball-cache-test',
+      message: 'Precomputed ball observations are available for this exact video.',
+    })
+    render(<App />)
+    uploadAndLoadMetadata()
+
+    expect(await screen.findByRole('heading', { name: 'Player A shots' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Player A shot segments on video timeline')).toBeInTheDocument()
+    const shotButtons = screen.getAllByRole('button', { name: /^Shot 1/ })
+    fireEvent.click(shotButtons[1])
+    expect(screen.getByLabelText('Analyzed tennis video')).toHaveProperty('currentTime', 0.65)
   })
 
   it('keeps the uploaded video visible when pose inference fails', async () => {
@@ -292,7 +354,10 @@ describe('real local video analysis flow', () => {
         'B',
       )
     })
-    expect(await screen.findByText(/Player B tracked/)).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.queryByText('Player choice required')).not.toBeInTheDocument()
+    })
+    expect(screen.getByRole('heading', { name: 'Your tennis analysis' })).toBeInTheDocument()
   })
 
   it('invalidates the active run and shows playback immediately on cancellation', async () => {

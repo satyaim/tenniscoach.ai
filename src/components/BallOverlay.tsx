@@ -60,9 +60,9 @@ export function BallOverlay({ track, timestampMs, resetToken }: BallOverlayProps
           const previous = points[index - 1]
           const current = points[index]
           const age = frame.t - current.timestampMs
-          const opacity = Math.max(0.08, 0.58 * (1 - age / BALL_TRAIL_MAX_AGE_MS))
+          const opacity = Math.max(0.08, 0.48 * (1 - age / BALL_TRAIL_MAX_AGE_MS))
           context.strokeStyle = `rgba(89, 255, 123, ${opacity})`
-          context.lineWidth = Math.max(1.5, current.radius * rect.scale * 0.55)
+          context.lineWidth = Math.max(1, 2.25 * rect.scale)
           context.beginPath()
           context.moveTo(rect.x + previous.x * rect.scale, rect.y + previous.y * rect.scale)
           context.lineTo(rect.x + current.x * rect.scale, rect.y + current.y * rect.scale)
@@ -74,9 +74,9 @@ export function BallOverlay({ track, timestampMs, resetToken }: BallOverlayProps
       const x = rect.x + marker.x * rect.scale
       const y = rect.y + marker.y * rect.scale
       const radius = marker.radius * rect.scale
-      context.fillStyle = 'rgba(103, 255, 123, 0.92)'
-      context.strokeStyle = 'rgba(4, 42, 16, 0.88)'
-      context.lineWidth = Math.max(1, 1.5 * rect.scale)
+      context.fillStyle = 'rgba(103, 255, 123, 0.12)'
+      context.strokeStyle = 'rgba(103, 255, 123, 0.94)'
+      context.lineWidth = Math.max(1.25, 2 * rect.scale)
       context.beginPath()
       context.arc(x, y, radius, 0, Math.PI * 2)
       context.fill()
@@ -102,4 +102,3 @@ export function BallOverlay({ track, timestampMs, resetToken }: BallOverlayProps
     />
   )
 }
-
