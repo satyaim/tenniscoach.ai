@@ -37,6 +37,23 @@ movement observations linked to visible pose evidence.
   active onset-to-offset movement window. Overlapping provisional fallback
   windows are consolidated so follow-through/recovery peaks do not become
   duplicate navigation entries.
+- **Opt-in Azure segment insight POC:** selecting a shot builds a six-frame,
+  timestamped contact sheet locally and reveals its insight. Once pose and ball
+  processing finish, these contact sheets are generated and sent sequentially
+  in the background so later clicks usually reuse a ready in-memory result. The
+  same-origin development API calls the existing `gpt-4o-mini` deployment,
+  validates timestamps, and blocks unsupported claims before returning visual
+  facts. The full video is never sent. Production hosting still requires an
+  authenticated server-side implementation of `/api/shot-insight`; Azure
+  credentials must never be placed in the browser bundle.
+  Grounded visual facts remain distinct from one conservative coaching focus,
+  actionable cue, and drill with repetitions and a visible success check.
+  Evidence timestamps seek and pause the replay for direct visual inspection.
+
+For the local hack demo, copy `.env.example` to `.env.local` and set
+`AZURE_OPENAI_API_KEY`. Vite reads this value only in its Node middleware; do
+not prefix it with `VITE_`, which would expose it to browser code. If the key is
+absent, the middleware falls back to the authenticated Azure CLI token.
 - **Evidence-linked feedback:** visible image-plane posture and movement
   observations include evidence, reliability, and explicit abstention.
 - **Automatic primary player:** the most stable/near player track is selected

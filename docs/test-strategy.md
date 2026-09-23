@@ -46,6 +46,7 @@ Privacy leakage, unsupported coaching claims, timestamp poisoning across videos,
 | Illegal schemas, coordinate-bearing ambiguous/abstained frames, digest failures, cancellation, stale runs, and independently revisioned ball-cache reuse fail closed without hiding pose playback. | `src\analysis\precomputedBallTrack.test.ts`, `src\App.test.tsx` |
 | Ball frame selection is nearest and bounded; marker radius and observed-only trail limits/reset rules are deterministic. | `src\analysis\ballOverlayModel.test.ts`, `src\components\BallOverlay.test.tsx` |
 | Shot navigation appears only when a pose-derived movement segment overlaps direct observed ball evidence; overlapping fallback windows are consolidated, and timeline/list controls seek to the selected range. | `src\components\ShotSegments.test.tsx`, `src\App.test.tsx` |
+| Azure insights are queued sequentially after analysis, selecting a shot reveals its current cached state, and evidence timestamps seek the source replay. Malformed model payloads fail closed. | `src\App.test.tsx`, `src\analysis\shotInsight.test.ts` |
 
 ## Current release boundary
 

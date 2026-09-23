@@ -296,7 +296,157 @@ input:focus-visible + * {
 }
 
 .shot-list small {
-  color: #ffc978;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #8fe9ac;
+}
+
+.shot-insight {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  margin-top: 18px;
+  text-align: left;
+  background: rgba(10, 27, 20, 0.78);
+  border: 1px solid rgba(143, 236, 174, 0.2);
+  border-radius: 16px;
+}
+
+.shot-insight-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.shot-insight-heading svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: #8fe9ac;
+}
+
+.shot-insight h2,
+.shot-insight p {
+  margin: 0;
+}
+
+.shot-insight h2 {
+  font-size: 1rem;
+}
+
+.shot-insight-heading p,
+.shot-insight-status,
+.shot-insight-withheld {
+  margin-top: 3px;
+  color: #91a39a;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.shot-insight-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #ffc0b5;
+}
+
+.shot-insight-error p {
+  margin: 0;
+}
+
+.shot-insight-error button {
+  padding: 8px 11px;
+  color: #07110e;
+  font-weight: 700;
+  cursor: pointer;
+  background: #8fe9ac;
+  border: 0;
+  border-radius: 10px;
+}
+
+.shot-insight-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.shot-insight-facts article,
+.shot-insight-coaching {
+  display: grid;
+  gap: 8px;
+  padding: 13px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(181, 255, 208, 0.12);
+  border-radius: 12px;
+}
+
+.shot-insight-coaching > span {
+  color: #8fe9ac;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.shot-insight-facts article > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.shot-insight-facts button {
+  padding: 5px 8px;
+  color: #dff7e7;
+  cursor: pointer;
+  background: rgba(103, 255, 123, 0.08);
+  border: 1px solid rgba(103, 255, 123, 0.28);
+  border-radius: 999px;
+}
+
+.shot-insight-coaching p,
+.shot-insight-coaching ol {
+  margin: 0;
+  color: #b7c8bf;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.shot-insight-action,
+.shot-insight-drill {
+  display: grid;
+  gap: 5px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(181, 255, 208, 0.1);
+}
+
+.shot-insight-action small,
+.shot-insight-drill small {
+  color: #8fe9ac;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.shot-insight-drill ol {
+  padding-left: 18px;
+}
+
+.shot-insight-evidence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.shot-insight-evidence button {
+  padding: 5px 8px;
+  color: #dff7e7;
+  cursor: pointer;
+  background: rgba(103, 255, 123, 0.08);
+  border: 1px solid rgba(103, 255, 123, 0.28);
+  border-radius: 999px;
 }
 
 .viewer-badge {

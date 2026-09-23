@@ -9,6 +9,10 @@ import {
 } from 'lucide-react'
 import { analysisCache } from './analysis/analysisCache'
 import {
+  generateShotInsight,
+  type ShotInsight,
+} from './analysis/shotInsight'
+import {
   clearPrecomputedBallTrackCache,
   loadPrecomputedBallTrack,
   type BallTrackLoadResult,
@@ -21,6 +25,7 @@ import {
   type VideoAnalysisProgress,
 } from './analysis/videoAnalysisPipeline'
 import { PoseViewer } from './components/PoseViewer'
+import { ShotInsightPanel } from './components/ShotInsightPanel'
 import { ShotList } from './components/ShotSegments'
 
 type Screen = 'upload' | 'processing' | 'analysis'
@@ -39,6 +44,9 @@ export default function App() {
   const analysisVideoRef = useRef<HTMLVideoElement>(null)
   const playbackVideoRef = useRef<HTMLVideoElement | null>(null)
   const controllerRef = useRef<AbortController | undefined>(undefined)
+  const insightControllerRef = useRef<AbortController | undefined>(undefined)
+  const insightRetryControllerRef = useRef<AbortController | undefined>(undefined)
+  const insightCacheRef = useRef(new Map<string, ShotInsight>())
   const objectUrlRef = useRef<string | undefined>(undefined)
   const startedUrlRef = useRef<string | undefined>(undefined)
   const runIdRef = useRef(0)
@@ -59,10 +67,20 @@ export default function App() {
   const [cacheMessage, setCacheMessage] = useState<string>()
   const [ballTrackResult, setBallTrackResult] = useState<BallTrackLoadResult>()
   const [ballMessage, setBallMessage] = useState<string>()
+  const [selectedInsightSegmentId, setSelectedInsightSegmentId] = useState<string>()
+  const [shotInsightStates, setShotInsightStates] = useState<Record<string, {
+    status: 'queued' | 'loading' | 'ready' | 'error'
+    insight?: ShotInsight
+    message?: string
+  }>>({})
 
   const releaseRun = (revokeUrl: boolean) => {
     controllerRef.current?.abort()
     controllerRef.current = undefined
+    insightControllerRef.current?.abort()
+    insightControllerRef.current = undefined
+    insightRetryControllerRef.current?.abort()
+    insightRetryControllerRef.current = undefined
     runIdRef.current += 1
     startedUrlRef.current = undefined
     if (revokeUrl && objectUrlRef.current) {
@@ -96,6 +114,8 @@ export default function App() {
     setOutput(undefined)
     setBallTrackResult(undefined)
     setBallMessage(undefined)
+    setSelectedInsightSegmentId(undefined)
+    setShotInsightStates({})
     setCurrentTimeMs(0)
     setProgress({ stage: 'preparing', value: 0, message: 'Preparing your private local video…' })
 
@@ -155,6 +175,8 @@ export default function App() {
     setCacheMessage(undefined)
     setBallTrackResult(undefined)
     setBallMessage(undefined)
+    setSelectedInsightSegmentId(undefined)
+    setShotInsightStates({})
     setSettingsOpen(false)
     if (!file.size) {
       setError('Choose a non-empty video file.')
@@ -186,6 +208,9 @@ export default function App() {
     setError(undefined)
     setSettingsOpen(false)
     setCacheMessage(undefined)
+    setSelectedInsightSegmentId(undefined)
+    setShotInsightStates({})
+    insightCacheRef.current.clear()
     if (inputRef.current) inputRef.current.value = ''
   }
 
@@ -238,11 +263,103 @@ export default function App() {
     ),
     [ballTrackResult, readyOutput?.segments],
   )
-  const selectShot = (startMs: number) => {
+  useEffect(() => {
+    if (!videoUrl || !readyOutput || !shotSegments.length) return
+    insightControllerRef.current?.abort()
+    const controller = new AbortController()
+    insightControllerRef.current = controller
+    setShotInsightStates(Object.fromEntries(
+      shotSegments.map((segment) => {
+        const cacheKey = `${readyOutput.sourceHash}:${segment.id}:${segment.onsetMs}:${segment.offsetMs}`
+        const cached = insightCacheRef.current.get(cacheKey)
+        return [
+          segment.id,
+          cached
+            ? { status: 'ready' as const, insight: cached }
+            : { status: 'queued' as const },
+        ]
+      }),
+    ))
+
+    void (async () => {
+      for (const segment of shotSegments) {
+        if (controller.signal.aborted) return
+        const cacheKey = `${readyOutput.sourceHash}:${segment.id}:${segment.onsetMs}:${segment.offsetMs}`
+        if (insightCacheRef.current.has(cacheKey)) continue
+        setShotInsightStates((states) => ({
+          ...states,
+          [segment.id]: { status: 'loading' },
+        }))
+        try {
+          const insight = await generateShotInsight(videoUrl, segment, controller.signal)
+          if (controller.signal.aborted) return
+          insightCacheRef.current.set(cacheKey, insight)
+          setShotInsightStates((states) => ({
+            ...states,
+            [segment.id]: { status: 'ready', insight },
+          }))
+        } catch (insightError) {
+          if (controller.signal.aborted) return
+          setShotInsightStates((states) => ({
+            ...states,
+            [segment.id]: {
+              status: 'error',
+              message: errorMessage(insightError),
+            },
+          }))
+        }
+      }
+    })()
+    return () => controller.abort()
+  }, [readyOutput, shotSegments, videoUrl])
+
+  const seekToTimestamp = (timestampMs: number, pause = false) => {
     const video = playbackVideoRef.current
     if (!video) return
-    video.currentTime = startMs / 1000
-    setCurrentTimeMs(startMs)
+    if (pause) video.pause()
+    video.currentTime = timestampMs / 1000
+    setCurrentTimeMs(timestampMs)
+  }
+  const selectShot = (segment: Parameters<typeof generateShotInsight>[1]) => {
+    seekToTimestamp(segment.onsetMs)
+    setSelectedInsightSegmentId(segment.id)
+  }
+  const selectInsightTimestamp = (timestamp: string) => {
+    const seconds = Number(timestamp.replace(/s$/, ''))
+    if (Number.isFinite(seconds)) seekToTimestamp(seconds * 1000, true)
+  }
+  const retrySelectedInsight = () => {
+    if (!selectedInsightSegmentId || !videoUrl || !readyOutput) return
+    const segment = shotSegments.find(({ id }) => id === selectedInsightSegmentId)
+    if (!segment) return
+    insightRetryControllerRef.current?.abort()
+    const controller = new AbortController()
+    insightRetryControllerRef.current = controller
+    const cacheKey = `${readyOutput.sourceHash}:${segment.id}:${segment.onsetMs}:${segment.offsetMs}`
+    insightCacheRef.current.delete(cacheKey)
+    setShotInsightStates((states) => ({
+      ...states,
+      [segment.id]: { status: 'loading' },
+    }))
+    void generateShotInsight(videoUrl, segment, controller.signal)
+      .then((insight) => {
+        if (controller.signal.aborted) return
+        insightCacheRef.current.set(cacheKey, insight)
+        setShotInsightStates((states) => ({
+          ...states,
+          [segment.id]: { status: 'ready', insight },
+        }))
+      })
+      .catch((insightError) => {
+        if (controller.signal.aborted) return
+        setShotInsightStates((states) => ({
+          ...states,
+          [segment.id]: {
+            status: 'error',
+            message: errorMessage(insightError),
+          },
+        }))
+      })
   }
 
   return (
@@ -354,6 +471,7 @@ export default function App() {
                 shotSegments={shotSegments}
                 currentTimeMs={currentTimeMs}
                 shotPlayerLabel={`Player ${readyOutput.selectedPlayerId}`}
+                onShotSelect={selectShot}
               />
               {visibleBallMessage && (
                 <p className="ball-availability" role="status">{visibleBallMessage}</p>
@@ -361,8 +479,15 @@ export default function App() {
               <ShotList
                 segments={shotSegments}
                 currentTimeMs={currentTimeMs}
-                onSelect={(segment) => selectShot(segment.onsetMs)}
+                onSelect={selectShot}
                 playerLabel={`Player ${readyOutput.selectedPlayerId}`}
+              />
+              <ShotInsightPanel
+                state={selectedInsightSegmentId
+                  ? shotInsightStates[selectedInsightSegmentId] ?? { status: 'queued' }
+                  : undefined}
+                onTimestampSelect={selectInsightTimestamp}
+                onRetry={retrySelectedInsight}
               />
             </>
           ) : (

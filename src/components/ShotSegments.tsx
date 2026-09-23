@@ -1,3 +1,4 @@
+import { Sparkles } from 'lucide-react'
 import type { StrokeSegment } from '../analysis/types'
 
 const timeLabel = (timestampMs: number) => {
@@ -83,7 +84,9 @@ export function ShotList({ segments, currentTimeMs, onSelect, playerLabel }: Sho
           >
             <strong>Shot {index + 1}</strong>
             <span>{timeLabel(segment.onsetMs)}–{timeLabel(segment.offsetMs)}</span>
-            {segment.status === 'provisional' && <small>Review segment</small>}
+            {segment.status === 'provisional' && (
+              <small><Sparkles size={13} aria-hidden="true" />Coach me</small>
+            )}
           </button>
         ))}
       </div>

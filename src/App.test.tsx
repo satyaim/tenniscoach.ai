@@ -9,6 +9,7 @@ import {
   loadPrecomputedBallTrack,
   type PrecomputedBallTrack,
 } from './analysis/precomputedBallTrack'
+import { generateShotInsight } from './analysis/shotInsight'
 
 vi.mock('./analysis/videoAnalysisPipeline', async () => {
   const actual = await vi.importActual<typeof import('./analysis/videoAnalysisPipeline')>(
@@ -27,6 +28,16 @@ vi.mock('./analysis/precomputedBallTrack', async () => {
   return {
     ...actual,
     loadPrecomputedBallTrack: vi.fn(),
+  }
+})
+
+vi.mock('./analysis/shotInsight', async () => {
+  const actual = await vi.importActual<typeof import('./analysis/shotInsight')>(
+    './analysis/shotInsight',
+  )
+  return {
+    ...actual,
+    generateShotInsight: vi.fn(),
   }
 })
 
@@ -195,6 +206,28 @@ describe('real local video analysis flow', () => {
 
   beforeEach(() => {
     vi.mocked(runVideoAnalysis).mockResolvedValue(analysisOutput)
+    vi.mocked(generateShotInsight).mockResolvedValue({
+      visualFacts: [{
+        fact: 'The knees are slightly bent.',
+        evidenceTimestamps: ['0.65s', '1.00s'],
+        confidence: 'medium',
+      }],
+      coachRecommendation: {
+        focusArea: 'Footwork base',
+        assessment: 'The stance narrows near the end of the sequence.',
+        whyItMatters: 'A repeatable base can make the next movement easier to organize.',
+        actionCue: 'Finish with enough space between your feet to move either direction.',
+        drill: {
+          name: 'Hit, recover, freeze',
+          steps: ['Shadow the movement.', 'Recover to a stable base.', 'Freeze for one second.'],
+          volume: '2 sets of 8 repetitions',
+          successCheck: 'Feet finish apart and the head stays between them.',
+        },
+        evidenceTimestamps: ['0.65s', '1.00s'],
+        confidence: 'medium',
+      },
+      withheld: [],
+    })
     vi.mocked(loadPrecomputedBallTrack).mockResolvedValue({
       status: 'unavailable',
       message: 'Ball visualization is not available for this exact video.',
@@ -273,6 +306,48 @@ describe('real local video analysis flow', () => {
     const shotButtons = screen.getAllByRole('button', { name: /^Shot 1/ })
     fireEvent.click(shotButtons[1])
     expect(screen.getByLabelText('Analyzed tennis video')).toHaveProperty('currentTime', 0.65)
+    expect(await screen.findByRole('heading', { name: 'TennisCoach.AI insights' })).toBeInTheDocument()
+    expect(screen.getByText('The knees are slightly bent.')).toBeInTheDocument()
+    expect(generateShotInsight).toHaveBeenCalledWith(
+      'blob:test-video',
+      shotSegment,
+      expect.any(AbortSignal),
+    )
+    const pauseSpy = vi.spyOn(HTMLMediaElement.prototype, 'pause')
+    fireEvent.click(screen.getAllByRole('button', { name: '1.00s' })[0])
+    expect(screen.getByLabelText('Analyzed tennis video')).toHaveProperty('currentTime', 1)
+    expect(pauseSpy).toHaveBeenCalled()
+    pauseSpy.mockRestore()
+    fireEvent.click(shotButtons[1])
+    expect(generateShotInsight).toHaveBeenCalledTimes(1)
+  })
+
+  it('offers a friendly retry when Azure coaching generation fails', async () => {
+    vi.mocked(runVideoAnalysis).mockResolvedValueOnce(analysisWithShot)
+    vi.mocked(loadPrecomputedBallTrack).mockResolvedValueOnce({
+      status: 'available',
+      track: observedBallTrack,
+      entry: {} as never,
+      cacheIdentity: 'ball-cache-test',
+      message: 'Precomputed ball observations are available for this exact video.',
+    })
+    vi.mocked(generateShotInsight)
+      .mockRejectedValueOnce(new Error('Azure produced an unsupported coaching recommendation.'))
+      .mockResolvedValueOnce({
+        visualFacts: [],
+        coachRecommendation: null,
+        withheld: ['No grounded coaching recommendation was available.'],
+      })
+    render(<App />)
+    uploadAndLoadMetadata()
+
+    const shotButton = (await screen.findAllByRole('button', { name: /^Shot 1/ }))[1]
+    fireEvent.click(shotButton)
+    expect(await screen.findByText(/Something went wrong while creating grounded coaching cues/i))
+      .toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Regenerate cues' }))
+    await waitFor(() => expect(generateShotInsight).toHaveBeenCalledTimes(2))
+    expect(screen.queryByText(/unsupported coaching recommendation/i)).not.toBeInTheDocument()
   })
 
   it('keeps the uploaded video visible when pose inference fails', async () => {

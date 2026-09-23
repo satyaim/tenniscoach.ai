@@ -140,6 +140,7 @@ interface PoseViewerProps {
   shotSegments?: StrokeSegment[]
   currentTimeMs?: number
   shotPlayerLabel?: string
+  onShotSelect?: (segment: StrokeSegment) => void
 }
 
 export function PoseViewer({
@@ -158,6 +159,7 @@ export function PoseViewer({
   shotSegments = [],
   currentTimeMs = 0,
   shotPlayerLabel,
+  onShotSelect,
 }: PoseViewerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const [presentedTimestampMs, setPresentedTimestampMs] = useState(0)
@@ -194,6 +196,10 @@ export function PoseViewer({
   }, [videoUrl])
 
   const selectShot = (segment: StrokeSegment) => {
+    if (onShotSelect) {
+      onShotSelect(segment)
+      return
+    }
     const video = videoRef.current
     if (!video) return
     video.currentTime = segment.onsetMs / 1000

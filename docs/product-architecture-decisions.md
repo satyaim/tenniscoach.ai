@@ -146,6 +146,23 @@ Because provisional fallback ranges are intentionally broad, overlapping ranges
 are consolidated into a non-overlapping chronological set before display. This
 prevents a follow-through or recovery peak from appearing as an additional shot.
 
+Selecting a displayed range may invoke the Azure visual-insight POC. A hidden
+browser video element seeks to six evenly spaced timestamps inside the selected
+onset-to-offset window and creates one labeled 3×2 JPEG contact sheet. Only that
+derived image is sent to `/api/shot-insight`; source video bytes are not sent.
+After pose and ball processing finish, insights are generated sequentially in
+timeline order. Each completed result is held in an in-memory, source-and-range
+addressed cache; selecting a range reveals its queued, loading, error, or ready
+state without starting a duplicate request.
+The development server acquires an Azure access token from the authenticated
+CLI and calls the existing vision deployment. It rejects malformed timestamps,
+unlisted evidence references, and prohibited coaching claims before returning
+JSON. This Vite middleware is a local POC boundary, not a production backend.
+The coaching prompt must translate one grounded visual pattern into a specific
+adjustment or progression, a concise practice cue, and a drill with volume and
+a visible success check. It may explain cautious general tennis principles but
+cannot infer contact, ball outcome, stroke identity, or tactics.
+
 For an exact verified known source, a separate canvas selects the canonical
 BallTrack frame by source timeline and renders only `observed` coordinates.
 `ambiguous` and `abstained` states contain no coordinate and clear the trail.
