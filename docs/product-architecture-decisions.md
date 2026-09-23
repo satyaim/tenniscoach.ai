@@ -14,6 +14,10 @@ The resolved MVP is therefore a **video evidence reviewer**, not an automated ce
 4. Automatically choose a player only when the tracker produces a recommendation. When multiple tracks are a near-tie, publish no observations until the user explicitly chooses Player A/B from settings; the result records `selectionMethod: manual`.
 5. Run the experimental movement segmenter and descriptive pose analyzer. Automatic stroke identity is disabled in this upload flow; low-rate, provisional, or weak evidence abstains.
 6. Review the source video with a timestamp-synchronized pose overlay and evidence-linked observation cards. Any analysis failure leaves normal source playback available.
+7. Independently resolve the full source SHA-256 against
+   `precomputed-ball-tracks.v1`. Exact known bytes may receive a verified
+   observed-only ball overlay; unknown, unavailable, mismatched, or invalid
+   entries remain pose-only.
 
 ## Architecture
 
@@ -34,6 +38,9 @@ flowchart LR
   L --> M[Content-addressed local artifact cache]
   C --> M
   F --> M
+  L --> N[Versioned same-origin ball manifest]
+  N --> O[SHA-256 verified precomputed track]
+  O --> I
 ```
 
 Key files:
@@ -46,6 +53,15 @@ Key files:
 - `src\analysis\types.ts` — replaceable analyzer boundary and revisioned `VideoAnalysisRun`.
 - `src\analysis\providerRegistry.ts` — metadata-only stage-provider catalog and fail-closed product eligibility gate; production has no executable ball binding.
 - `src\analysis\analysisCache.ts` — recursive canonical hashing, immutable stage envelopes, memory-fronted IndexedDB persistence, semantic read validation, corruption eviction, atomic publication, and clear-cache support.
+- `src\analysis\precomputedBallTrack.ts` — strict
+  `precomputed-ball-tracks.v1` / `precomputed-ball-track.v1` parsing, stable
+  manifest plus versioned fallback, exact source hash/bytes/duration/geometry
+  matching, lazy track fetch, declared byte length and SHA-256 verification,
+  abort handling, and independently revisioned in-memory reuse.
+- `src\analysis\ballOverlayModel.ts` — nearest bounded source-frame selection,
+  visualization-only marker radius, and raw observed-only trail/reset rules.
+- `src\components\BallOverlay.tsx` — DPR-aware intrinsic-source-pixel rendering
+  using the same contain geometry and presented-frame clock as `PoseViewer`.
 - `src\components\AnnotatedReplay.tsx` — full-source replay, skeleton/labels, unified chapter lane, key markers, navigation hooks, manual marker actions, and WebM export.
 
 ## Measurement contract
@@ -72,7 +88,7 @@ Diagnostics record actual timestamps, median interval, interval IQR, maximum gap
 | Rule segmenter is Experimental | It is a transparent temporary baseline, not learned AI segmentation. | Retire after a licensed temporal model wins held-out boundary/class accuracy, latency, size, and browser fallback gates. |
 | Two-player one-time confirmation | Track recommendation is useful but not physical identity proof. | Validated identity/target selection exists. |
 | Explicit WebM export only | Keeps video local and avoids FFmpeg/backend requirements. | Reliable local MP4/audio support is measured and requested. |
-| Metadata-only ball provider registry | Rights, lifecycle, capability, score semantics, model/checkpoint/config identity, and availability must be inspectable without shipping an executable provider. Product execution requires eligible lifecycle, cleared rights, explicit product enablement, available runtime, and a registered binding; the current binding map is empty. | A reviewed provider and artifact pass rights, benchmark, researcher, PM, QA, and CEO gates. |
+| Replaceable precomputed-ball evidence provider | A full upload SHA-256 may select only a versioned same-origin artifact whose source bytes/timeline/geometry and artifact digest validate. Ball provider/cache identity stays separate from pose. This permits a bounded known-video demo without enabling executable or filename-selected inference. | A reviewed live provider and artifact pass rights, benchmark, researcher, PM, QA, and CEO gates. |
 | Content-addressed stage cache | Exact source bytes plus stage/provider/model/checkpoint/config/contract/decoder identity and direct dependency artifact hashes allow selective reuse without filename assumptions. Pose, chapters, ball observations, trajectory, court, and stroke stages remain independently invalidatable. | Storage pressure or cross-device workflows require a user-approved alternative. |
 | Derived artifacts only | Source metadata, pose landmarks, and chapters may persist locally; raw decoded RGB frames, `VideoFrame`, `ImageBitmap`, and object URLs remain ephemeral. | A measured model requires raw-frame persistence and the user explicitly accepts that privacy/storage change. |
 
@@ -115,8 +131,19 @@ The temporary rules are limited to orchestration, evidence eligibility, safety, 
 
 ## Privacy and safety
 
-Video stays local. The exact MediaPipe WASM runtime is fetched from its pinned jsDelivr URL on first use; the model is fetched from a versioned same-origin path and SHA-256 verified before initialization. "Local video processing" therefore does not mean fully offline runtime delivery. Raw decoded frames are not persisted. Derived source metadata, pose landmarks, and movement chapters may persist in browser IndexedDB under content-addressed keys that include the verified model digest; the settings panel exposes a clear action. Object URLs are never cached. No upload, telemetry, automatic video export, ball/court provider, contact detector, tactical inference, or medical/correctness claim exists. Guidance is general 2D movement observation.
+Video stays local. The exact MediaPipe WASM runtime is fetched from its pinned jsDelivr URL on first use; the model is fetched from a versioned same-origin path and SHA-256 verified before initialization. "Local video processing" therefore does not mean fully offline runtime delivery. The app also fetches a small same-origin precomputed-ball manifest and, only for an exact known source hash, a declared JSON track whose bytes and SHA-256 are verified before use. Neither request contains video bytes. Raw decoded frames are not persisted. Derived source metadata, pose landmarks, and movement chapters may persist in browser IndexedDB under content-addressed keys that include the verified model digest; verified ball JSON uses a separate revisioned in-memory cache. The settings panel exposes a clear action. Object URLs are never cached. No video upload, telemetry, automatic video export, live ball inference, contact detector, tactical inference, or medical/correctness claim exists. Guidance is general 2D movement observation.
 
 ## Pose overlay rendering decision
 
-The active upload renderer uses a DPR-aware canvas over the intrinsic video aspect ratio. It draws the explicitly selected player's nearest eligible pose frame only, with a bounded timestamp tolerance and no landmark interpolation. Primary pose evidence is cyan; magenta is reserved for an intentionally requested secondary track and is not shown in the default analysis. Landmarks below 0.45 visibility are omitted. Joints are circular four-source-pixel marks and limbs are rounded semi-transparent four-source-pixel strokes, including eligible ankle/heel/toe links. Stale overlays are suppressed. No ball marker, trail, court overlay, or contact cue is rendered.
+The active upload renderer uses DPR-aware canvases over the intrinsic video aspect ratio. It draws the explicitly selected player's nearest eligible pose frame only, with a bounded timestamp tolerance and no landmark interpolation. Primary pose evidence is cyan; magenta is reserved for an intentionally requested secondary track and is not shown in the default analysis. Landmarks below 0.45 visibility are omitted. Joints are circular four-source-pixel marks and limbs are rounded semi-transparent four-source-pixel strokes, including eligible ankle/heel/toe links. Stale overlays are suppressed.
+
+For an exact verified known source, a separate canvas selects the canonical
+BallTrack frame by source timeline and renders only `observed` coordinates.
+`ambiguous` and `abstained` states contain no coordinate and clear the trail.
+The marker uses emitted component radius plus 1.5 source pixels, clamped to
+3–18 source pixels; when the optional genuine radius is absent, a conservative
+6-source-pixel visualization-only radius is used. The trail contains at most 18
+raw observed points and 650 ms, fades older segments, and resets on any
+non-observed state, seek, replacement, backwards/large timestamp discontinuity,
+or a large-distance safeguard. It performs no smoothing, interpolation, repair,
+prediction, contact detection, or outcome inference.

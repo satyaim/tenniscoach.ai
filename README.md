@@ -20,6 +20,14 @@ movement observations linked to visible pose evidence.
   abstain below 6 Hz.
 - **Synchronized replay:** normalized pose landmarks are aligned to the
   intrinsic video aspect ratio and selected by source-media timestamp.
+- **Exact-match precomputed ball evidence:** after the upload has been hashed,
+  the site may load a versioned same-origin manifest and a SHA-256-verified JSON
+  track only when the full source hash, byte length, duration, and geometry
+  match. Unknown videos remain pose-only.
+- **Observed-only ball visualization:** accepted BallTrack observations are
+  drawn as a green marker with a short raw-observation trail. Ambiguous and
+  abstained frames render no coordinate and reset the trail. This is precomputed
+  demo evidence, not live ball inference.
 - **Evidence-linked feedback:** visible image-plane posture and movement
   observations include evidence, reliability, and explicit abstention.
 - **Automatic primary player:** the most stable/near player track is selected
@@ -82,7 +90,7 @@ and hand-path movement when landmark and sampling gates pass.
 
 It does **not** establish:
 
-- racket or ball tracking;
+- live ball inference or general ball tracking for unknown uploads;
 - physical racket-ball contact or impact time;
 - early/on-time/late timing relative to impact;
 - validated forehand, backhand, or serve identity;
@@ -96,6 +104,10 @@ is shown as unavailable instead of being converted into a prepared result.
 ## Privacy
 
 - Video processing occurs in the browser.
+- The selected video bytes are hashed and decoded locally and are not uploaded.
+- The app may request a small same-origin precomputed-ball manifest and, for an
+  exact known content hash only, its declared JSON track. The track bytes are
+  verified against the manifest before use.
 - No application backend, account, telemetry upload, or automatic media export
   is used.
 - The source file remains a temporary `blob:` URL and is revoked on replacement
@@ -105,6 +117,9 @@ is shown as unavailable instead of being converted into a prepared result.
   SHA-256; the exact MediaPipe WASM runtime is currently loaded from jsDelivr.
 - Validated derived pose JSON may be stored in this browser until the user
   clears the local analysis cache from settings.
+- Verified ball-track JSON may be retained in a separate in-memory cache whose
+  revision includes the manifest, provider, config, and track digest; it does
+  not invalidate or replace pose cache entries.
 
 ## License
 

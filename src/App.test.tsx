@@ -6,6 +6,7 @@ import {
   runVideoAnalysis,
   type VideoAnalysisOutput,
 } from './analysis/videoAnalysisPipeline'
+import { loadPrecomputedBallTrack } from './analysis/precomputedBallTrack'
 
 vi.mock('./analysis/videoAnalysisPipeline', async () => {
   const actual = await vi.importActual<typeof import('./analysis/videoAnalysisPipeline')>(
@@ -15,6 +16,16 @@ vi.mock('./analysis/videoAnalysisPipeline', async () => {
     ...actual,
     analyzePoseFrames: vi.fn(actual.analyzePoseFrames),
     runVideoAnalysis: vi.fn(),
+  }
+})
+
+vi.mock('./analysis/precomputedBallTrack', async () => {
+  const actual = await vi.importActual<typeof import('./analysis/precomputedBallTrack')>(
+    './analysis/precomputedBallTrack',
+  )
+  return {
+    ...actual,
+    loadPrecomputedBallTrack: vi.fn(),
   }
 })
 
@@ -186,6 +197,10 @@ describe('real local video analysis flow', () => {
   beforeEach(() => {
     vi.mocked(runVideoAnalysis).mockResolvedValue(analysisOutput)
     vi.mocked(analyzePoseFrames).mockResolvedValue(readyAnalysisOutput)
+    vi.mocked(loadPrecomputedBallTrack).mockResolvedValue({
+      status: 'unavailable',
+      message: 'Ball visualization is not available for this exact video.',
+    })
     createObjectUrlSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test-video')
     revokeObjectUrlSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
   })
@@ -209,6 +224,36 @@ describe('real local video analysis flow', () => {
     expect(screen.getByText('Pelvis projection relative to visible ankle span')).toBeInTheDocument()
     expect(screen.queryByText('Prepared sample')).not.toBeInTheDocument()
     expect(runVideoAnalysis).toHaveBeenCalledTimes(1)
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Ball visualization is not available for this exact video.',
+    )
+    expect(screen.queryByLabelText('Precomputed observed ball overlay')).not.toBeInTheDocument()
+  })
+
+  it('does not publish a stale ball result after upload replacement', async () => {
+    let resolveFirst: ((value: Awaited<ReturnType<typeof loadPrecomputedBallTrack>>) => void) | undefined
+    vi.mocked(loadPrecomputedBallTrack)
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve }))
+      .mockResolvedValueOnce({
+        status: 'unavailable',
+        message: 'Second video has no exact precomputed ball track.',
+      })
+    render(<App />)
+    uploadAndLoadMetadata()
+    await screen.findByRole('heading', { name: 'Your tennis analysis' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Upload another video' }))
+    uploadAndLoadMetadata()
+    await screen.findByRole('heading', { name: 'Your tennis analysis' })
+    resolveFirst?.({
+      status: 'unavailable',
+      message: 'Stale first-video result.',
+    })
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Second video has no exact precomputed ball track.',
+    )
+    expect(screen.queryByText('Stale first-video result.')).not.toBeInTheDocument()
   })
 
   it('keeps the uploaded video visible when pose inference fails', async () => {
@@ -227,7 +272,7 @@ describe('real local video analysis flow', () => {
     uploadAndLoadMetadata()
 
     expect(await screen.findByRole('heading', { name: 'Choose the player to analyze' })).toBeInTheDocument()
-    expect(screen.getByRole('status')).toHaveTextContent('Player choice required')
+    expect(screen.getByText('Player choice required')).toBeInTheDocument()
     expect(screen.queryByText('Pelvis projection relative to visible ankle span')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Tracked player color mapping')).toHaveTextContent('Player A — cyan overlay')
     expect(screen.getByLabelText('Tracked player color mapping')).toHaveTextContent('Player B — magenta overlay')

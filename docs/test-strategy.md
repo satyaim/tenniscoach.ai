@@ -42,6 +42,9 @@ Privacy leakage, unsupported coaching claims, timestamp poisoning across videos,
 | Cache quota/write failures do not hide source playback or block normal pose/chapter results. | `src\App.test.tsx` |
 | User cancellation stops post-session processing while preserving the current source-video playback URL. | `src\App.test.tsx` |
 | Ball selector exposes unavailable and rights-blocked states without success-shaped fallback. | `src\App.test.tsx` |
+| Precomputed ball loading requires exact source SHA-256 plus matching bytes/duration/geometry, tries the stable manifest before the frozen v1 fallback, and verifies exact track bytes and SHA-256. | `src\analysis\precomputedBallTrack.test.ts` |
+| Illegal schemas, coordinate-bearing ambiguous/abstained frames, digest failures, cancellation, stale runs, and independently revisioned ball-cache reuse fail closed without hiding pose playback. | `src\analysis\precomputedBallTrack.test.ts`, `src\App.test.tsx` |
+| Ball frame selection is nearest and bounded; marker radius and observed-only trail limits/reset rules are deterministic. | `src\analysis\ballOverlayModel.test.ts`, `src\components\BallOverlay.test.tsx` |
 
 ## Current release boundary
 
@@ -56,10 +59,21 @@ machine-local ignored files cannot satisfy the build and browser gates.
 
 `scripts\browser-pose-validation.mjs` runs the actual model in installed Chrome and Edge on port 5174, leaving 5173 untouched. It accepts external rights-cleared landscape and portrait clip paths and covers first-run model load/inference, cache miss/hit, repeated seek, immediate cancellation, cancellation during sampled seeking, forced CPU execution plus unit-tested GPU fallback, portrait/landscape geometry, decode-failure playback, and object-URL replacement cleanup. The clips remain outside the repository.
 
+`scripts\browser-ball-validation.mjs` accepts an external generated manifest,
+its sibling track files, three exact known clips, and an unknown clip. It routes
+the JSON as same-origin responses without copying it into this branch, then runs
+real pose processing in installed Chrome and Edge. It checks all three hashes,
+observed-only marker output, blank ambiguous/abstained frames, seek/reset and
+repeated rendering, portrait/landscape contain geometry, replacement cleanup,
+unknown-video pose-only fallback, and the measured delay between pose readiness
+and verified ball availability. No filename matching is used.
+
 Known blockers for production:
 
 - Offline extraction uses repeated HTML-video seeks and synchronous MediaPipe calls. It yields every six samples and publishes progress batches, but inference is not yet moved to a dedicated worker or a formally bounded scheduler.
 - Pose inference is not worker-backed; cache publication is cancellation-safe, but MediaPipe execution itself remains synchronous and page-lifetime-bound.
 - Chapter boundaries and stroke family hypotheses are not coach-labelled or calibrated.
-- Ball, racket, court calibration, metric depth, and true contact remain absent.
+- General/live ball inference, racket, court calibration, metric depth, and true
+  contact remain absent. The known-video ball overlay is precomputed qualitative
+  evidence only.
 - Device/browser/FPS matrix and five-user comprehension study remain outstanding.

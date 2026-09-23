@@ -10,6 +10,11 @@ import {
   X,
 } from 'lucide-react'
 import { analysisCache } from './analysis/analysisCache'
+import {
+  clearPrecomputedBallTrackCache,
+  loadPrecomputedBallTrack,
+  type BallTrackLoadResult,
+} from './analysis/precomputedBallTrack'
 import { poseFrameAtTime, trackedPoseFrameAtTime } from './analysis/overlayModel'
 import {
   analyzePoseFrames,
@@ -61,6 +66,8 @@ export default function App() {
   const [error, setError] = useState<string>()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [cacheMessage, setCacheMessage] = useState<string>()
+  const [ballTrackResult, setBallTrackResult] = useState<BallTrackLoadResult>()
+  const [ballMessage, setBallMessage] = useState<string>()
 
   const releaseRun = (revokeUrl: boolean) => {
     controllerRef.current?.abort()
@@ -96,6 +103,8 @@ export default function App() {
     setScreen('processing')
     setError(undefined)
     setOutput(undefined)
+    setBallTrackResult(undefined)
+    setBallMessage(undefined)
     setCurrentTimeMs(0)
     setProgress({ stage: 'preparing', value: 0, message: 'Preparing your private local video…' })
 
@@ -110,6 +119,30 @@ export default function App() {
       })
       if (runId !== runIdRef.current) return
       setOutput(result)
+      setBallMessage('Checking for an exact precomputed ball track…')
+      void loadPrecomputedBallTrack({
+        source: {
+          sha256: result.sourceHash.replace(/^sha256:/, ''),
+          bytes: file.size,
+          durationMs: result.source.durationMs,
+          width: result.source.width,
+          height: result.source.height,
+        },
+        signal: controller.signal,
+      }).then((ballResult) => {
+        if (runId !== runIdRef.current) return
+        setBallTrackResult(ballResult)
+        setBallMessage(ballResult.message)
+      }).catch((ballError) => {
+        if (runId !== runIdRef.current) return
+        if (ballError instanceof DOMException && ballError.name === 'AbortError') return
+        setBallTrackResult(undefined)
+        setBallMessage(
+          ballError instanceof Error
+            ? `Ball visualization unavailable: ${ballError.message}`
+            : 'Ball visualization is unavailable.',
+        )
+      })
       if (result.status === 'ready') {
         setCurrentTimeMs(result.filteredFrames[0]?.timestampMs ?? 0)
       } else {
@@ -129,6 +162,8 @@ export default function App() {
     setError(undefined)
     setOutput(undefined)
     setCacheMessage(undefined)
+    setBallTrackResult(undefined)
+    setBallMessage(undefined)
     setSettingsOpen(false)
     if (!file.size) {
       setError('Choose a non-empty video file.')
@@ -155,6 +190,8 @@ export default function App() {
     setSelectedFile(undefined)
     setVideoUrl(undefined)
     setOutput(undefined)
+    setBallTrackResult(undefined)
+    setBallMessage(undefined)
     setError(undefined)
     setSettingsOpen(false)
     setCacheMessage(undefined)
@@ -204,6 +241,7 @@ export default function App() {
   const clearCache = async () => {
     try {
       await analysisCache.clear()
+      clearPrecomputedBallTrackCache()
       setCacheMessage('Local derived analysis cache cleared.')
     } catch {
       setCacheMessage('The local cache could not be cleared.')
@@ -379,6 +417,7 @@ export default function App() {
                 intrinsicHeight={readyOutput.source.height}
                 onVideoRef={(video) => { playbackVideoRef.current = video }}
                 onTimeUpdate={setCurrentTimeMs}
+                ballTrack={ballTrackResult?.status === 'available' ? ballTrackResult.track : undefined}
               />
               <div className="analysis-meta" aria-label="Analysis details">
                 <span>
@@ -388,6 +427,9 @@ export default function App() {
                 <span>{readyOutput.result.poseTrackQuality} pose evidence</span>
                 <span>{readyOutput.cacheStatus === 'hit' ? 'reused local analysis' : 'analyzed locally'}</span>
               </div>
+              {ballMessage && (
+                <p className="ball-availability" role="status">{ballMessage}</p>
+              )}
               <div className="observation-grid">
                 {readyOutput.result.observations.map((observation) => (
                   <button
@@ -407,7 +449,9 @@ export default function App() {
                 ))}
               </div>
               <p className="limitations-note">
-                Pose-only review: ball, racket, contact timing, force, and true weight transfer are not measured.
+                {ballTrackResult?.status === 'available'
+                  ? 'Ball marks are precomputed observed coordinates for this exact video; no live ball inference, smoothing, prediction, contact, speed, spin, or outcome is shown.'
+                  : 'Pose-only review: ball, racket, contact timing, force, and true weight transfer are not measured.'}
               </p>
             </>
           ) : output?.status === 'selection-required' ? (
@@ -422,7 +466,11 @@ export default function App() {
                 primaryPlayerLabel="A"
                 secondaryPlayerLabel="B"
                 onTimeUpdate={setCurrentTimeMs}
+                ballTrack={ballTrackResult?.status === 'available' ? ballTrackResult.track : undefined}
               />
+              {ballMessage && (
+                <p className="ball-availability" role="status">{ballMessage}</p>
+              )}
               <div className="player-selection-card" role="status">
                 <Settings size={24} aria-hidden="true" />
                 <strong>Player choice required</strong>

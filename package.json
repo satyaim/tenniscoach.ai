@@ -10,6 +10,7 @@
     "typecheck": "tsc -b --pretty false",
     "test": "vitest run",
     "test:browser": "node scripts/browser-pose-validation.mjs",
+    "test:browser:ball": "node scripts/browser-ball-validation.mjs",
     "test:coverage": "vitest run --coverage",
     "smoke": "node scripts/smoke.mjs",
     "validate": "npm run lint && npm run typecheck && npm run test && npm run build && npm run smoke",

@@ -1,6 +1,8 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { containVideoRect } from '../analysis/videoGeometry'
+import type { PrecomputedBallTrack } from '../analysis/precomputedBallTrack'
 import type { PoseFrame } from '../analysis/types'
+import { BallOverlay } from './BallOverlay'
 
 const VISIBILITY_THRESHOLD = 0.45
 const CONNECTIONS = [
@@ -132,6 +134,7 @@ interface PoseViewerProps {
   onTimeUpdate?: (timestampMs: number) => void
   primaryPlayerLabel?: string
   secondaryPlayerLabel?: string
+  ballTrack?: PrecomputedBallTrack
 }
 
 export function PoseViewer({
@@ -145,18 +148,27 @@ export function PoseViewer({
   onTimeUpdate,
   primaryPlayerLabel,
   secondaryPlayerLabel,
+  ballTrack,
 }: PoseViewerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const [presentedTimestampMs, setPresentedTimestampMs] = useState(0)
+  const [ballResetToken, setBallResetToken] = useState(0)
 
   useEffect(() => {
     const video = videoRef.current
-    if (!video || !onTimeUpdate || typeof video.requestVideoFrameCallback !== 'function') return
+    if (
+      !video
+      || (!onTimeUpdate && !ballTrack)
+      || typeof video.requestVideoFrameCallback !== 'function'
+    ) return
 
     let callbackId: number | undefined
     let cancelled = false
     const updateFromPresentedFrame: VideoFrameRequestCallback = (_now, metadata) => {
       if (cancelled) return
-      onTimeUpdate(metadata.mediaTime * 1000)
+      const timestampMs = metadata.mediaTime * 1000
+      setPresentedTimestampMs(timestampMs)
+      onTimeUpdate?.(timestampMs)
       callbackId = video.requestVideoFrameCallback(updateFromPresentedFrame)
     }
 
@@ -165,7 +177,12 @@ export function PoseViewer({
       cancelled = true
       if (callbackId !== undefined) video.cancelVideoFrameCallback(callbackId)
     }
-  }, [onTimeUpdate, videoUrl])
+  }, [ballTrack, onTimeUpdate, videoUrl])
+
+  useEffect(() => {
+    setPresentedTimestampMs(0)
+    setBallResetToken((token) => token + 1)
+  }, [videoUrl])
 
   return (
     <div
@@ -184,8 +201,17 @@ export function PoseViewer({
         muted
         playsInline
         aria-label="Analyzed tennis video"
-        onTimeUpdate={(event) => onTimeUpdate?.(event.currentTarget.currentTime * 1000)}
-        onSeeked={(event) => onTimeUpdate?.(event.currentTarget.currentTime * 1000)}
+        onTimeUpdate={(event) => {
+          const timestampMs = event.currentTarget.currentTime * 1000
+          setPresentedTimestampMs(timestampMs)
+          onTimeUpdate?.(timestampMs)
+        }}
+        onSeeked={(event) => {
+          const timestampMs = event.currentTarget.currentTime * 1000
+          setBallResetToken((token) => token + 1)
+          setPresentedTimestampMs(timestampMs)
+          onTimeUpdate?.(timestampMs)
+        }}
       />
       <PoseOverlayCanvas
         frame={frame}
@@ -202,6 +228,13 @@ export function PoseViewer({
           intrinsicHeight={intrinsicHeight}
           tone="secondary"
           playerLabel={secondaryPlayerLabel}
+        />
+      )}
+      {ballTrack && (
+        <BallOverlay
+          track={ballTrack}
+          timestampMs={presentedTimestampMs}
+          resetToken={ballResetToken}
         />
       )}
       <div className="viewer-badge">
