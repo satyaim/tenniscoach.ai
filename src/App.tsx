@@ -27,6 +27,7 @@ import {
 import { PoseViewer } from './components/PoseViewer'
 import { ShotInsightPanel } from './components/ShotInsightPanel'
 import { ShotList } from './components/ShotSegments'
+import { videoStageStyle } from './components/videoStage'
 
 type Screen = 'upload' | 'processing' | 'analysis'
 
@@ -419,7 +420,7 @@ export default function App() {
           <p className="eyebrow">LOCAL AI ANALYSIS</p>
           <h1 id="processing-title">Analyzing your tennis video…</h1>
           <p className="result-copy">{progress.message}</p>
-          <div className="processing-player" style={{ aspectRatio: sourceAspectRatio }}>
+          <div className="processing-player" style={videoStageStyle(sourceAspectRatio)}>
             <video src={videoUrl} controls muted playsInline aria-label="Uploaded tennis video preview" />
           </div>
           <progress value={progress.value} max={1} aria-label="Video analysis progress" />
@@ -497,7 +498,7 @@ export default function App() {
               />
             </>
           ) : (
-            <div className="analysis-fallback">
+            <div className="analysis-fallback" style={videoStageStyle(sourceAspectRatio)}>
               <video src={videoUrl} controls muted playsInline aria-label="Uploaded tennis video" />
               <div role="alert">
                 <AlertTriangle size={24} aria-hidden="true" />

@@ -1,4 +1,4 @@
-import { act, render } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PoseViewer } from './PoseViewer'
 
@@ -45,5 +45,21 @@ describe('PoseViewer', () => {
 
     view.unmount()
     expect(cancelVideoFrameCallback).toHaveBeenCalledWith(17)
+  })
+
+  it('constrains portrait video height without changing its aspect ratio', () => {
+    render(
+      <PoseViewer
+        videoUrl="blob:portrait-video"
+        label="Portrait analysis"
+        intrinsicWidth={1080}
+        intrinsicHeight={1920}
+      />,
+    )
+
+    expect(screen.getByLabelText('Pose visualization: Portrait analysis')).toHaveStyle({
+      aspectRatio: '0.5625',
+      width: 'min(100%, 38.25vh, 427.5px)',
+    })
   })
 })

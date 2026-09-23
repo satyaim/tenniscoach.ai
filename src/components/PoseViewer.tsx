@@ -4,6 +4,7 @@ import type { PrecomputedBallTrack } from '../analysis/precomputedBallTrack'
 import type { PoseFrame, StrokeSegment } from '../analysis/types'
 import { BallOverlay } from './BallOverlay'
 import { ShotProgressRail } from './ShotSegments'
+import { videoStageStyle } from './videoStage'
 
 const VISIBILITY_THRESHOLD = 0.45
 const CONNECTIONS = [
@@ -212,7 +213,7 @@ export function PoseViewer({
     <div
       className="pose-viewer"
       aria-label={`Pose visualization: ${label}`}
-      style={{ aspectRatio: intrinsicWidth / intrinsicHeight }}
+      style={videoStageStyle(intrinsicWidth / intrinsicHeight)}
     >
       <video
         ref={(video) => {
