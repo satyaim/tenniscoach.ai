@@ -1,0 +1,193 @@
+{
+  "schemaVersion": "precomputed-ball-tracks.v1",
+  "artifactPurpose": "Precomputed, quarantined learned ball-localization tracks for fixed demo sources.",
+  "limitations": [
+    "These artifacts are not general uploaded-video ball inference.",
+    "They do not establish accuracy, contact, bounce, timing, tactics, speed, spin, or production model approval.",
+    "Only direct learned observations are accepted; ambiguous and abstained frames have no coordinates."
+  ],
+  "identity": {
+    "entryKey": "full source-file SHA-256",
+    "trackDigestAlgorithm": "SHA-256",
+    "deterministicEncoding": "UTF-8 JSON with stable insertion order and one trailing newline"
+  },
+  "entries": {
+    "02050519b6b81c02244f4607b77826a26d06f0458b258e8fde885f7fd6ddb6e3": {
+      "label": "demo-local-b",
+      "status": "available",
+      "generation": "reused",
+      "source": {
+        "sha256": "02050519b6b81c02244f4607b77826a26d06f0458b258e8fde885f7fd6ddb6e3",
+        "bytes": 3921563,
+        "durationMs": 16666.666666666668,
+        "width": 720,
+        "height": 1280,
+        "fps": 59.94,
+        "frameCount": 999
+      },
+      "provider": {
+        "receiptSha256": "5198d49c0e615615f2a819982788dfd517452c7375bba1c6691d4207a2690b43",
+        "adapterId": "racketvision-balltrack-quarantined-research-v1",
+        "model": "RacketVision BallTrack / MS-TrackNetV3",
+        "codeRevision": "c44af2a08524d3cb54d818f19686f4cdea4d2793",
+        "runtime": "Python 3.11.9, ONNX Runtime 1.24.4, providers=['DmlExecutionProvider', 'CPUExecutionProvider'], OpenCV 5.0.0",
+        "checkpointSha256": "00d707b9db7a49561c411e4765956e79bcd7c7e20c7a0a535073440b3e972342",
+        "checkpointBytes": 46585585,
+        "runtimeArtifactSha256": "50d77f3d1e568d92615abc22c46121a21840be759f7bd37ddd6da07f1f857941",
+        "config": {
+          "modelInput": "512x288",
+          "historyFrames": 4,
+          "medianBackground": true,
+          "threshold": 0.5,
+          "ambiguityRatio": 0.35,
+          "interpolation": false,
+          "smoothing": false,
+          "trajectoryRepair": false
+        }
+      },
+      "coordinateSpace": {
+        "kind": "intrinsic-source-pixels",
+        "origin": "top-left",
+        "xDirection": "right",
+        "yDirection": "down",
+        "width": 720,
+        "height": 1280
+      },
+      "measurements": {
+        "processingDurationMs": 408710.45279999817,
+        "peakMemoryBytes": 4895698944,
+        "frames": 999,
+        "states": {
+          "observed": 66,
+          "ambiguous": 0,
+          "abstained": 933
+        },
+        "observedCoverage": 0.06606606606606606
+      },
+      "track": {
+        "path": "02050519b6b81c02244f4607b77826a26d06f0458b258e8fde885f7fd6ddb6e3.json",
+        "sha256": "c339acd3125e70286ee9013a67808535d9e89b959f6cbc04e68d1d23a0610de5",
+        "bytes": 94696
+      },
+      "rightsAndProvenanceWarning": "Quarantined demo evidence only. Source-media, checkpoint, annotation, and training-media rights are unresolved; no redistribution, accuracy, contact, timing, tactics, uploaded-video inference, or production-model approval is implied."
+    },
+    "1b38ce75cd51eaa7cde4348a3f2b703ed0ab4e19bd65ac1bb42032f93fcbe032": {
+      "label": "demo-local-a",
+      "status": "available",
+      "generation": "reused",
+      "source": {
+        "sha256": "1b38ce75cd51eaa7cde4348a3f2b703ed0ab4e19bd65ac1bb42032f93fcbe032",
+        "bytes": 4910671,
+        "durationMs": 20813.333333333332,
+        "width": 720,
+        "height": 1280,
+        "fps": 59.961563100576555,
+        "frameCount": 1248
+      },
+      "provider": {
+        "receiptSha256": "be1e596b5d500bead3debb652f781911318d1c379d1825c32d254e05f77fe706",
+        "adapterId": "racketvision-balltrack-quarantined-research-v1",
+        "model": "RacketVision BallTrack / MS-TrackNetV3",
+        "codeRevision": "c44af2a08524d3cb54d818f19686f4cdea4d2793",
+        "runtime": "Python 3.11.9, ONNX Runtime 1.24.4, providers=['DmlExecutionProvider', 'CPUExecutionProvider'], OpenCV 5.0.0",
+        "checkpointSha256": "00d707b9db7a49561c411e4765956e79bcd7c7e20c7a0a535073440b3e972342",
+        "checkpointBytes": 46585585,
+        "runtimeArtifactSha256": "50d77f3d1e568d92615abc22c46121a21840be759f7bd37ddd6da07f1f857941",
+        "config": {
+          "modelInput": "512x288",
+          "historyFrames": 4,
+          "medianBackground": true,
+          "threshold": 0.5,
+          "ambiguityRatio": 0.35,
+          "interpolation": false,
+          "smoothing": false,
+          "trajectoryRepair": false
+        }
+      },
+      "coordinateSpace": {
+        "kind": "intrinsic-source-pixels",
+        "origin": "top-left",
+        "xDirection": "right",
+        "yDirection": "down",
+        "width": 720,
+        "height": 1280
+      },
+      "measurements": {
+        "processingDurationMs": 472714.724700003,
+        "peakMemoryBytes": 5778747392,
+        "frames": 1248,
+        "states": {
+          "observed": 200,
+          "ambiguous": 7,
+          "abstained": 1041
+        },
+        "observedCoverage": 0.16025641025641027
+      },
+      "track": {
+        "path": "1b38ce75cd51eaa7cde4348a3f2b703ed0ab4e19bd65ac1bb42032f93fcbe032.json",
+        "sha256": "e491ac01bb5dca0dd0ff56decb470089f78f30ef03a6e8159920486f9df79f05",
+        "bytes": 126365
+      },
+      "rightsAndProvenanceWarning": "Quarantined demo evidence only. Source-media, checkpoint, annotation, and training-media rights are unresolved; no redistribution, accuracy, contact, timing, tactics, uploaded-video inference, or production-model approval is implied."
+    },
+    "e130ba17ef3cf0581103cf8b913e0796eca57426e30eb1c03fbda5fde71dc23e": {
+      "label": "backview-01",
+      "status": "available",
+      "generation": "reused",
+      "source": {
+        "sha256": "e130ba17ef3cf0581103cf8b913e0796eca57426e30eb1c03fbda5fde71dc23e",
+        "bytes": 11059377,
+        "durationMs": 11466.666,
+        "width": 1920,
+        "height": 1080,
+        "fps": 60.08721279576819,
+        "frameCount": 689
+      },
+      "provider": {
+        "receiptSha256": "bf7d609576e91a17f7c4711a0542880f9f357a69c7cb6ba1b9e3274b9f931456",
+        "adapterId": "racketvision-balltrack-quarantined-research-v1",
+        "model": "RacketVision BallTrack / MS-TrackNetV3",
+        "codeRevision": "c44af2a08524d3cb54d818f19686f4cdea4d2793",
+        "runtime": "Python 3.11.9, PyTorch 2.14.0+cpu, OpenCV 5.0.0",
+        "checkpointSha256": "00d707b9db7a49561c411e4765956e79bcd7c7e20c7a0a535073440b3e972342",
+        "checkpointBytes": 46585585,
+        "runtimeArtifactSha256": null,
+        "config": {
+          "modelInput": "512x288",
+          "historyFrames": 4,
+          "medianBackground": true,
+          "threshold": 0.5,
+          "ambiguityRatio": 0.35,
+          "interpolation": false,
+          "smoothing": false,
+          "trajectoryRepair": false
+        }
+      },
+      "coordinateSpace": {
+        "kind": "intrinsic-source-pixels",
+        "origin": "top-left",
+        "xDirection": "right",
+        "yDirection": "down",
+        "width": 1920,
+        "height": 1080
+      },
+      "measurements": {
+        "processingDurationMs": 1759982.6538999332,
+        "peakMemoryBytes": 3272310784,
+        "frames": 689,
+        "states": {
+          "observed": 478,
+          "ambiguous": 16,
+          "abstained": 195
+        },
+        "observedCoverage": 0.6937590711175616
+      },
+      "track": {
+        "path": "e130ba17ef3cf0581103cf8b913e0796eca57426e30eb1c03fbda5fde71dc23e.json",
+        "sha256": "865928d694d58e52eab03e60cd6aa43e7b3b1fc473f77b0d7dd9a1a0d30f682c",
+        "bytes": 88671
+      },
+      "rightsAndProvenanceWarning": "Quarantined demo evidence only. Source-media, checkpoint, annotation, and training-media rights are unresolved; no redistribution, accuracy, contact, timing, tactics, uploaded-video inference, or production-model approval is implied."
+    }
+  }
+}

@@ -9,11 +9,12 @@
     "lint": "eslint .",
     "typecheck": "tsc -b --pretty false",
     "test": "vitest run",
+    "test:ball-tracks": "node scripts/validate-ball-tracks.mjs",
     "test:browser": "node scripts/browser-pose-validation.mjs",
     "test:browser:ball": "node scripts/browser-ball-validation.mjs",
     "test:coverage": "vitest run --coverage",
     "smoke": "node scripts/smoke.mjs",
-    "validate": "npm run lint && npm run typecheck && npm run test && npm run build && npm run smoke",
+    "validate": "npm run lint && npm run typecheck && npm run test && npm run test:ball-tracks && npm run build && npm run smoke",
     "source:hash": "node scripts/source-revision.mjs"
   },
   "dependencies": {
