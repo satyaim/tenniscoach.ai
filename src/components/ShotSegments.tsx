@@ -1,4 +1,10 @@
-import { Sparkles } from 'lucide-react'
+import {
+  CircleAlert,
+  CircleCheck,
+  Clock3,
+  LoaderCircle,
+  Sparkles,
+} from 'lucide-react'
 import type { StrokeSegment } from '../analysis/types'
 
 const timeLabel = (timestampMs: number) => {
@@ -65,9 +71,45 @@ interface ShotListProps {
   currentTimeMs: number
   onSelect: (segment: StrokeSegment) => void
   playerLabel?: string
+  insightStates?: Record<string, 'queued' | 'loading' | 'ready' | 'error'>
 }
 
-export function ShotList({ segments, currentTimeMs, onSelect, playerLabel }: ShotListProps) {
+const insightIndicator = (status?: 'queued' | 'loading' | 'ready' | 'error') => {
+  if (status === 'loading') {
+    return {
+      icon: <LoaderCircle size={16} aria-hidden="true" />,
+      label: 'Generating AI insight',
+      className: 'is-loading',
+    }
+  }
+  if (status === 'ready') {
+    return {
+      icon: <CircleCheck size={16} aria-hidden="true" />,
+      label: 'AI insight ready',
+      className: 'is-ready',
+    }
+  }
+  if (status === 'error') {
+    return {
+      icon: <CircleAlert size={16} aria-hidden="true" />,
+      label: 'AI insight needs retry',
+      className: 'is-error',
+    }
+  }
+  return {
+    icon: <Clock3 size={16} aria-hidden="true" />,
+    label: 'AI insight queued',
+    className: 'is-queued',
+  }
+}
+
+export function ShotList({
+  segments,
+  currentTimeMs,
+  onSelect,
+  playerLabel,
+  insightStates = {},
+}: ShotListProps) {
   if (!segments.length) return null
   const activeId = activeSegmentId(segments, currentTimeMs)
 
@@ -76,18 +118,30 @@ export function ShotList({ segments, currentTimeMs, onSelect, playerLabel }: Sho
       <h2 id="shot-list-title">{playerLabel ? `${playerLabel} shots` : 'Shots'}</h2>
       <div>
         {segments.map((segment, index) => (
-          <button
-            type="button"
-            key={segment.id}
-            className={segment.id === activeId ? 'is-active' : ''}
-            onClick={() => onSelect(segment)}
-          >
-            <strong>Shot {index + 1}</strong>
-            <span>{timeLabel(segment.onsetMs)}–{timeLabel(segment.offsetMs)}</span>
-            {segment.status === 'provisional' && (
-              <small><Sparkles size={13} aria-hidden="true" />Coach me</small>
-            )}
-          </button>
+          (() => {
+            const indicator = insightIndicator(insightStates[segment.id])
+            return (
+              <button
+                type="button"
+                key={segment.id}
+                className={segment.id === activeId ? 'is-active' : ''}
+                onClick={() => onSelect(segment)}
+              >
+                <strong>Shot {index + 1}</strong>
+                <span>{timeLabel(segment.onsetMs)}–{timeLabel(segment.offsetMs)}</span>
+                <small className="shot-coach-row">
+                  <span><Sparkles size={13} aria-hidden="true" />Coach me</span>
+                  <i
+                    className={`shot-insight-indicator ${indicator.className}`}
+                    aria-label={indicator.label}
+                    title={indicator.label}
+                  >
+                    {indicator.icon}
+                  </i>
+                </small>
+              </button>
+            )
+          })()
         ))}
       </div>
     </section>

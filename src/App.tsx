@@ -481,6 +481,12 @@ export default function App() {
                 currentTimeMs={currentTimeMs}
                 onSelect={selectShot}
                 playerLabel={`Player ${readyOutput.selectedPlayerId}`}
+                insightStates={Object.fromEntries(
+                  Object.entries(shotInsightStates).map(([segmentId, state]) => [
+                    segmentId,
+                    state.status,
+                  ]),
+                )}
               />
               <ShotInsightPanel
                 state={selectedInsightSegmentId

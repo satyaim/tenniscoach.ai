@@ -113,6 +113,7 @@ describe('shot navigation', () => {
           currentTimeMs={150}
           onSelect={onSelect}
           playerLabel="Player A"
+          insightStates={{ 'shot-1': 'ready' }}
         />
       </>,
     )
@@ -120,7 +121,25 @@ describe('shot navigation', () => {
     expect(screen.getByLabelText('Player A shot segments on video timeline')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Player A shots' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Shot 1, 0:00.1 to 0:00.2/ })).toBeInTheDocument()
+    expect(screen.getByLabelText('AI insight ready')).toBeInTheDocument()
     fireEvent.click(screen.getAllByRole('button', { name: /^Shot 1/ })[1])
     expect(onSelect).toHaveBeenCalledWith(segments[0])
+  })
+
+  it('shows queued and loading AI insight states', () => {
+    const segments = [
+      segment('queued', 100, 200),
+      segment('loading', 300, 400),
+    ]
+    render(
+      <ShotList
+        segments={segments}
+        currentTimeMs={0}
+        onSelect={vi.fn()}
+        insightStates={{ queued: 'queued', loading: 'loading' }}
+      />,
+    )
+    expect(screen.getByLabelText('AI insight queued')).toBeInTheDocument()
+    expect(screen.getByLabelText('Generating AI insight')).toBeInTheDocument()
   })
 })

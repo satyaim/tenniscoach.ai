@@ -295,11 +295,42 @@ input:focus-visible + * {
   font-size: 0.74rem;
 }
 
-.shot-list small {
+.shot-list .shot-coach-row,
+.shot-list .shot-coach-row > span {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   color: #8fe9ac;
+}
+
+.shot-list .shot-coach-row {
+  justify-content: space-between;
+  width: 100%;
+}
+
+.shot-insight-indicator {
+  display: inline-flex;
+  color: #81938a;
+  font-style: normal;
+}
+
+.shot-insight-indicator.is-loading {
+  color: #8fe9ac;
+  animation: shot-insight-spin 0.9s linear infinite;
+}
+
+.shot-insight-indicator.is-ready {
+  color: #8fe9ac;
+}
+
+.shot-insight-indicator.is-error {
+  color: #ffb19f;
+}
+
+@keyframes shot-insight-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .shot-insight {
