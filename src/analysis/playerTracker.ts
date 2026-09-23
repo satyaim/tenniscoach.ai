@@ -26,7 +26,7 @@ export interface PlayerTrackingResult {
   tracks: PlayerTrack[]
   recommendedPlayerId?: PlayerTrack['id']
   selectionConfidence: number
-  selectionMethod: 'auto-near' | 'manual-required'
+  selectionMethod: 'auto-near'
   warnings: string[]
 }
 
@@ -180,14 +180,13 @@ export const trackPlayers = (frames: PoseFrame[]): PlayerTrackingResult => {
   const selectionConfidence = Math.max(0, Math.min(1, (best?.persistence ?? 0) * 0.55 + scoreGap * 1.6))
   const warnings = [
     ...(orderSwapCount > 0 ? [`Pose detection order changed ${orderSwapCount} time(s); stable tracks were used.`] : []),
-    ...(scoreGap < 0.08 && runnerUp ? ['Near-player scores are close; confirm the player manually.'] : []),
+    ...(scoreGap < 0.08 && runnerUp ? ['Secondary pose detections were ignored; analysis uses the strongest primary track.'] : []),
   ]
-  const canRecommend = Boolean(best && best.persistence >= 0.55 && (!runnerUp || scoreGap >= 0.08))
   return {
     tracks: rawTracks,
-    recommendedPlayerId: canRecommend ? best.id : undefined,
+    recommendedPlayerId: best?.id,
     selectionConfidence,
-    selectionMethod: canRecommend ? 'auto-near' : 'manual-required',
+    selectionMethod: 'auto-near',
     warnings,
   }
 }

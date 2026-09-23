@@ -14,11 +14,9 @@ import {
   type BallTrackLoadResult,
 } from './analysis/precomputedBallTrack'
 import { shotSegmentsWithBallEvidence } from './analysis/shotSegments'
-import { poseFrameAtTime, trackedPoseFrameAtTime } from './analysis/overlayModel'
+import { poseFrameAtTime } from './analysis/overlayModel'
 import {
-  analyzePoseFrames,
   runVideoAnalysis,
-  type CompletedVideoAnalysisOutput,
   type VideoAnalysisOutput,
   type VideoAnalysisProgress,
 } from './analysis/videoAnalysisPipeline'
@@ -212,25 +210,6 @@ export default function App() {
     setScreen('analysis')
   }
 
-  const changePlayer = async (playerId: 'A' | 'B') => {
-    if (!output || (output.status === 'ready' && playerId === output.selectedPlayerId)) return
-    setCacheMessage('Updating the selected player…')
-    try {
-      const next = await analyzePoseFrames(output.frames, output.source, playerId)
-      if (next.status !== 'ready') throw new Error('The selected player could not be isolated.')
-      setOutput({
-        ...next,
-        sourceHash: output.sourceHash,
-        cacheStatus: output.cacheStatus,
-      })
-      setCurrentTimeMs(next.filteredFrames[0]?.timestampMs ?? 0)
-      setCacheMessage(`Player ${playerId} selected.`)
-      setSettingsOpen(false)
-    } catch (selectionError) {
-      setCacheMessage(errorMessage(selectionError))
-    }
-  }
-
   const clearCache = async () => {
     try {
       await analysisCache.clear()
@@ -241,24 +220,10 @@ export default function App() {
     }
   }
 
-  const readyOutput: CompletedVideoAnalysisOutput | undefined =
-    output?.status === 'ready' ? output : undefined
+  const readyOutput = output
   const displayedFrame = useMemo(() => {
     return poseFrameAtTime(readyOutput?.filteredFrames ?? [], currentTimeMs)
   }, [currentTimeMs, readyOutput?.filteredFrames])
-  const selectionPreview = useMemo(() => {
-    if (output?.status !== 'selection-required') return undefined
-    const trackA = output.tracking.tracks.find((track) => track.id === 'A')
-    const trackB = output.tracking.tracks.find((track) => track.id === 'B')
-    return {
-      frameA: trackA
-        ? trackedPoseFrameAtTime(output.frames, trackA.poses, currentTimeMs)
-        : undefined,
-      frameB: trackB
-        ? trackedPoseFrameAtTime(output.frames, trackB.poses, currentTimeMs)
-        : undefined,
-    }
-  }, [currentTimeMs, output])
 
   const showSettings = Boolean(videoUrl)
   const visibleBallMessage =
@@ -301,30 +266,7 @@ export default function App() {
         {settingsOpen && (
           <aside className="settings-panel" aria-label="Analysis settings panel">
             <strong>Analysis settings</strong>
-            {output && output.tracking.tracks.length > 1 ? (
-              <div className="settings-group">
-                <span>Tracked player</span>
-                <div className="player-buttons">
-                  {output.tracking.tracks.map((track) => (
-                    <button
-                      type="button"
-                      key={track.id}
-                      className={output.status === 'ready' && track.id === output.selectedPlayerId ? 'is-selected' : ''}
-                      onClick={() => void changePlayer(track.id)}
-                    >
-                      Player {track.id}
-                    </button>
-                  ))}
-                </div>
-                <small>
-                  {output.status === 'selection-required'
-                    ? 'Choose the player to analyze before feedback is published.'
-                    : 'The closest stable player is selected automatically when evidence is clear.'}
-                </small>
-              </div>
-            ) : (
-              <p>Player selection appears here when more than one person is tracked.</p>
-            )}
+            <p>Analysis follows one primary player throughout the video.</p>
             <button type="button" className="text-button" onClick={() => void clearCache()}>
               Clear local analysis cache
             </button>
@@ -394,9 +336,7 @@ export default function App() {
           <h1 id="analysis-title">
             {readyOutput
               ? 'Your tennis analysis'
-              : output?.status === 'selection-required'
-                ? 'Choose the player to analyze'
-                : 'Your video is still available'}
+              : 'Your video is still available'}
           </h1>
 
           {readyOutput ? (
@@ -424,41 +364,6 @@ export default function App() {
                 onSelect={(segment) => selectShot(segment.onsetMs)}
                 playerLabel={`Player ${readyOutput.selectedPlayerId}`}
               />
-            </>
-          ) : output?.status === 'selection-required' ? (
-            <>
-              <PoseViewer
-                videoUrl={videoUrl!}
-                frame={selectionPreview?.frameA}
-                secondaryFrame={selectionPreview?.frameB}
-                label="Player selection preview"
-                intrinsicWidth={output.source.width}
-                intrinsicHeight={output.source.height}
-                primaryPlayerLabel="A"
-                secondaryPlayerLabel="B"
-                onTimeUpdate={setCurrentTimeMs}
-                ballTrack={ballTrackResult?.status === 'available' ? ballTrackResult.track : undefined}
-              />
-              {visibleBallMessage && (
-                <p className="ball-availability" role="status">{visibleBallMessage}</p>
-              )}
-              <div className="player-selection-card" role="status">
-                <Settings size={24} aria-hidden="true" />
-                <strong>Player choice required</strong>
-                <p>Match the colored pose and letter to the player you want analyzed. No feedback is generated until you choose.</p>
-                <div className="player-preview-legend" aria-label="Tracked player color mapping">
-                  <span><i className="player-swatch player-swatch--primary" />Player A — cyan overlay</span>
-                  <span><i className="player-swatch player-swatch--secondary" />Player B — magenta overlay</span>
-                </div>
-                <div className="player-selection-buttons">
-                  <button type="button" onClick={() => void changePlayer('A')}>
-                    Analyze Player A — cyan overlay
-                  </button>
-                  <button type="button" onClick={() => void changePlayer('B')}>
-                    Analyze Player B — magenta overlay
-                  </button>
-                </div>
-              </div>
             </>
           ) : (
             <div className="analysis-fallback">

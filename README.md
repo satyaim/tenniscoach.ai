@@ -34,12 +34,14 @@ movement observations linked to visible pose evidence.
   boundaries remain visibly marked for review and do not become contact or
   stroke-classification claims. Shot ranges use the same selected player shown
   by the pose overlay and require observed ball evidence inside that player’s
-  active onset-to-offset movement window.
+  active onset-to-offset movement window. Overlapping provisional fallback
+  windows are consolidated so follow-through/recovery peaks do not become
+  duplicate navigation entries.
 - **Evidence-linked feedback:** visible image-plane posture and movement
   observations include evidence, reliability, and explicit abstention.
 - **Automatic primary player:** the most stable/near player track is selected
-  by default. If two tracks exist, the top-right settings panel can switch the
-  analyzed player without rerunning pose inference.
+  for the full analysis. Secondary or stray pose detections are ignored and
+  cannot change shot navigation.
 - **Derived-only cache:** complete pose artifacts may be reused from local
   IndexedDB. Source video bytes, object URLs, decoded frames, and pixel buffers
   are not persisted.

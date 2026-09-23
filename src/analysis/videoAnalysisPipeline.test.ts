@@ -32,7 +32,7 @@ describe('uploaded video analysis pipeline', () => {
     expect(output.filteredFrames.every((frame) => frame.poses.length <= 1)).toBe(true)
   })
 
-  it('requires explicit selection when multiple tracks are ambiguous', async () => {
+  it('analyzes only the strongest primary track when multiple poses are detected', async () => {
     const ambiguous = demoFrames.map((frame) => ({
       ...frame,
       poses: [
@@ -46,20 +46,10 @@ describe('uploaded video analysis pipeline', () => {
       height: 720,
     })
 
-    expect(output).toMatchObject({
-      status: 'selection-required',
-      selectionMethod: 'manual-required',
-    })
-    expect('result' in output).toBe(false)
-
-    const selected = await analyzePoseFrames(ambiguous, {
-      durationMs: demoDurationMs,
-      width: 1280,
-      height: 720,
-    }, 'B')
-    expect(selected.status).toBe('ready')
-    if (selected.status !== 'ready') throw new Error('Expected manual selection to complete.')
-    expect(selected.selectedPlayerId).toBe('B')
-    expect(selected.result.playerSelection?.selectionMethod).toBe('manual')
+    expect(output.status).toBe('ready')
+    expect(output.selectedPlayerId).toBe('A')
+    expect(output.filteredFrames.every((frame) => frame.poses.length <= 1)).toBe(true)
+    expect(output.result.playerSelection?.selectionMethod).toBe('auto-near')
+    expect(output.tracking.warnings.join(' ')).toMatch(/secondary pose detections were ignored/i)
   })
 })

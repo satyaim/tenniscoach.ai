@@ -40,7 +40,7 @@ describe('player tracking and selection', () => {
     expect(recommended.averageArea).toBeGreaterThan(tracking.tracks.find((track) => track.id !== recommended.id)!.averageArea)
   })
 
-  it('tolerates short gaps but requires manual choice for near-ties', () => {
+  it('tolerates short gaps and still selects one primary track for near-ties', () => {
     const frames = demoFrames.slice(0, 20).map((frame, index) => ({
       ...frame,
       poses:
@@ -53,7 +53,8 @@ describe('player tracking and selection', () => {
     }))
     const tracking = trackPlayers(frames)
     expect(tracking.tracks[0].persistence).toBeGreaterThan(0.85)
-    expect(tracking.selectionMethod).toBe('manual-required')
-    expect(tracking.recommendedPlayerId).toBeUndefined()
+    expect(tracking.selectionMethod).toBe('auto-near')
+    expect(tracking.recommendedPlayerId).toBe(tracking.tracks[0].id)
+    expect(tracking.warnings.join(' ')).toMatch(/secondary pose detections were ignored/i)
   })
 })

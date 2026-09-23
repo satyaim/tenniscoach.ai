@@ -2,7 +2,6 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import {
-  analyzePoseFrames,
   runVideoAnalysis,
   type VideoAnalysisOutput,
 } from './analysis/videoAnalysisPipeline'
@@ -17,7 +16,6 @@ vi.mock('./analysis/videoAnalysisPipeline', async () => {
   )
   return {
     ...actual,
-    analyzePoseFrames: vi.fn(actual.analyzePoseFrames),
     runVideoAnalysis: vi.fn(),
   }
 })
@@ -37,7 +35,6 @@ const points = Array.from({ length: 33 }, (_, index) => ({
   y: 0.2 + Math.floor(index / 4) * 0.07,
   visibility: 0.98,
 }))
-const secondaryPoints = points.map((point) => ({ ...point, x: point.x + 0.3 }))
 
 const analysisOutput = {
   status: 'ready',
@@ -179,45 +176,6 @@ const observedBallTrack: PrecomputedBallTrack = {
   ],
 }
 
-const selectionOutput = {
-  status: 'selection-required',
-  source: { durationMs: 4000, width: 1280, height: 720 },
-  sourceHash: 'sha256:test',
-  frames: [
-    { timestampMs: 0, poses: [points] },
-    { timestampMs: 100, poses: [points, secondaryPoints] },
-  ],
-  tracking: {
-    tracks: [
-      {
-        id: 'A',
-        poses: [points, points],
-        persistence: 1,
-        coverage: 1,
-        averageArea: 0.4,
-        averageCenterY: 0.6,
-        primaryScore: 0.8,
-        warnings: [],
-      },
-      {
-        id: 'B',
-        poses: [undefined, secondaryPoints],
-        persistence: 1,
-        coverage: 1,
-        averageArea: 0.39,
-        averageCenterY: 0.6,
-        primaryScore: 0.79,
-        warnings: [],
-      },
-    ],
-    selectionConfidence: 0.2,
-    selectionMethod: 'manual-required',
-    warnings: ['Near-player scores are close; confirm the player manually.'],
-  },
-  selectionMethod: 'manual-required',
-  cacheStatus: 'miss',
-} as unknown as VideoAnalysisOutput
-
 const uploadAndLoadMetadata = () => {
   fireEvent.change(screen.getByLabelText('Upload tennis video'), {
     target: { files: [new File(['demo'], 'demo.mp4', { type: 'video/mp4' })] },
@@ -237,7 +195,6 @@ describe('real local video analysis flow', () => {
 
   beforeEach(() => {
     vi.mocked(runVideoAnalysis).mockResolvedValue(analysisOutput)
-    vi.mocked(analyzePoseFrames).mockResolvedValue(readyAnalysisOutput)
     vi.mocked(loadPrecomputedBallTrack).mockResolvedValue({
       status: 'unavailable',
       message: 'Ball visualization is not available for this exact video.',
@@ -326,38 +283,6 @@ describe('real local video analysis flow', () => {
     expect(await screen.findByRole('heading', { name: 'Your video is still available' })).toBeInTheDocument()
     expect(screen.getByLabelText('Uploaded tennis video')).toHaveAttribute('src', 'blob:test-video')
     expect(screen.getByRole('alert')).toHaveTextContent('The pose model could not process this clip.')
-  })
-
-  it('requires explicit player choice before publishing ambiguous multi-person feedback', async () => {
-    vi.mocked(runVideoAnalysis).mockResolvedValueOnce(selectionOutput)
-    render(<App />)
-    uploadAndLoadMetadata()
-
-    expect(await screen.findByRole('heading', { name: 'Choose the player to analyze' })).toBeInTheDocument()
-    expect(screen.getByText('Player choice required')).toBeInTheDocument()
-    expect(screen.queryByText('Pelvis projection relative to visible ankle span')).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Tracked player color mapping')).toHaveTextContent('Player A — cyan overlay')
-    expect(screen.getByLabelText('Tracked player color mapping')).toHaveTextContent('Player B — magenta overlay')
-    expect(screen.getByLabelText('Player A pose overlay')).toBeInTheDocument()
-    expect(screen.getByLabelText('Player B pose overlay')).toBeInTheDocument()
-
-    vi.mocked(analyzePoseFrames).mockResolvedValueOnce({
-      ...readyAnalysisOutput,
-      selectedPlayerId: 'B',
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Analyze Player B — magenta overlay' }))
-
-    await waitFor(() => {
-      expect(analyzePoseFrames).toHaveBeenCalledWith(
-        selectionOutput.frames,
-        selectionOutput.source,
-        'B',
-      )
-    })
-    await waitFor(() => {
-      expect(screen.queryByText('Player choice required')).not.toBeInTheDocument()
-    })
-    expect(screen.getByRole('heading', { name: 'Your tennis analysis' })).toBeInTheDocument()
   })
 
   it('invalidates the active run and shows playback immediately on cancellation', async () => {

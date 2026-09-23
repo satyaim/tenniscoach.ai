@@ -30,11 +30,6 @@ interface VideoAnalysisBase {
   cacheStatus: CacheReadStatus
 }
 
-export interface PlayerSelectionRequiredOutput extends VideoAnalysisBase {
-  status: 'selection-required'
-  selectionMethod: 'manual-required'
-}
-
 export interface CompletedVideoAnalysisOutput extends VideoAnalysisBase {
   status: 'ready'
   filteredFrames: PoseFrame[]
@@ -43,7 +38,7 @@ export interface CompletedVideoAnalysisOutput extends VideoAnalysisBase {
   result: AnalysisResult
 }
 
-export type VideoAnalysisOutput = PlayerSelectionRequiredOutput | CompletedVideoAnalysisOutput
+export type VideoAnalysisOutput = CompletedVideoAnalysisOutput
 
 interface RunOptions {
   file: File
@@ -100,29 +95,11 @@ const reliabilityForSelection = (
 export const analyzePoseFrames = async (
   frames: PoseFrame[],
   source: VideoSourceMetadata,
-  selectedPlayerId?: PlayerTrack['id'],
-): Promise<
-  | Omit<PlayerSelectionRequiredOutput, 'sourceHash' | 'cacheStatus'>
-  | Omit<CompletedVideoAnalysisOutput, 'sourceHash' | 'cacheStatus'>
-> => {
+): Promise<Omit<CompletedVideoAnalysisOutput, 'sourceHash' | 'cacheStatus'>> => {
   const tracking = trackPlayers(frames)
-  if (
-    selectedPlayerId === undefined &&
-    tracking.tracks.length > 1 &&
-    tracking.selectionMethod === 'manual-required'
-  ) {
-    return {
-      status: 'selection-required',
-      source,
-      frames,
-      tracking,
-      selectionMethod: 'manual-required',
-    }
-  }
   const selectedTrack =
-    tracking.tracks.find((track) => track.id === selectedPlayerId) ??
     tracking.tracks.find((track) => track.id === tracking.recommendedPlayerId) ??
-    (tracking.tracks.length === 1 ? tracking.tracks[0] : undefined)
+    tracking.tracks[0]
   if (!selectedTrack) {
     throw new AnalysisError('NO_PERSON', 'No full player pose was visible often enough to analyze.')
   }
@@ -155,7 +132,7 @@ export const analyzePoseFrames = async (
   })
   result.playerSelection = {
     selectedPlayerId: selectedTrack.id,
-    selectionMethod: selectedPlayerId ? 'manual' : 'auto-near',
+    selectionMethod: 'auto-near',
     recommendationBand: reliabilityForSelection(tracking.selectionConfidence),
     trackingWarnings: tracking.warnings,
   }

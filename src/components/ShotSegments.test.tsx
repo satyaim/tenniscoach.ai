@@ -75,6 +75,27 @@ describe('shot navigation', () => {
     expect(shotSegmentsWithBallEvidence([segment('shot', 80, 220)])).toEqual([])
   })
 
+  it('consolidates overlapping fallback windows into separated navigation ranges', () => {
+    const extendedTrack = {
+      ...track,
+      timeline: { ...track.timeline, frameCount: 10, durationMs: 1000 },
+      frames: Array.from({ length: 10 }, (_, index) => ({
+        i: index,
+        t: index * 100,
+        s: 'observed' as const,
+        x: 20,
+        y: 20,
+      })),
+    }
+    expect(shotSegmentsWithBallEvidence([
+      segment('first', 0, 220),
+      segment('follow-through', 120, 320),
+      segment('second', 350, 560),
+      segment('second-recovery', 460, 650),
+      segment('third', 700, 900),
+    ], extendedTrack).map(({ id }) => id)).toEqual(['first', 'second', 'third'])
+  })
+
   it('renders timeline segments and a clickable shot list', () => {
     const onSelect = vi.fn()
     const segments = [segment('shot-1', 100, 200)]

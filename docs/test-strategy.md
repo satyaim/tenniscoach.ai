@@ -14,7 +14,7 @@ Privacy leakage, unsupported coaching claims, timestamp poisoning across videos,
 | Automatic stroke identity remains unavailable in the uploaded-video POC. | `src\analysis\heuristicAnalyzer.test.ts` |
 | The movement segmenter supports handedness-neutral internal detection. | `src\analysis\strokeSegmenter.test.ts` |
 | Handedness remains unknown; unstable active-wrist evidence abstains. | `src\analysis\heuristicAnalyzer.test.ts` |
-| Ambiguous multiple tracks require explicit selection and publish no observations. | `src\analysis\videoAnalysisPipeline.test.ts`, `src\App.test.tsx` |
+| Multiple pose detections still produce one deterministic primary-player analysis; secondary tracks cannot alter shot navigation. | `src\analysis\videoAnalysisPipeline.test.ts`, `src\analysis\playerTracker.test.ts` |
 | Source hashing, model loading, and repeated seeks honor cancellation; a late landmarker is closed. | `src\analysis\analysisCache.test.ts`, `src\analysis\poseExtractor.test.ts` |
 | The self-hosted model is source-controlled, copied into the build, and SHA-256 verified; required license/attribution files ship with it; GPU initialization falls back to CPU. | `scripts\smoke.mjs`, `src\analysis\poseExtractor.test.ts`, `scripts\browser-pose-validation.mjs` |
 | Stale pose frames are suppressed and portrait/landscape contain geometry preserves source aspect. | `src\analysis\overlayModel.test.ts`, `src\analysis\videoGeometry.test.ts` |
@@ -23,7 +23,7 @@ Privacy leakage, unsupported coaching claims, timestamp poisoning across videos,
 | Camera denial is recoverable and demo/upload remain available. | `src\App.test.tsx` |
 | Upload type/size and corrupt/short/no-person cases fail explicitly. | App/analyzer tests |
 | Offline clips and live camera never share a MediaPipe timestamp graph. | pose adapter design plus sequential real-browser smoke |
-| Two tracked players require one session-level confirmation and allow manual override. | `src\analysis\playerTracker.test.ts`, `src\App.test.tsx` |
+| Near-tied tracks still select the strongest primary track and record that secondary detections were ignored. | `src\analysis\playerTracker.test.ts` |
 | Causal segmenter does not scan future active samples. | state-machine implementation and deterministic segment tests |
 | Every clean segment has context, valid pre/post samples, duration, pose, scale, and sampling gates. | `src\analysis\strokeSegmenter.test.ts` |
 | Failed finalization never removes playback. | still-motion/provisional unit and component regressions |
@@ -45,7 +45,7 @@ Privacy leakage, unsupported coaching claims, timestamp poisoning across videos,
 | Precomputed ball loading requires exact source SHA-256 plus matching bytes/duration/geometry, tries the stable manifest before the frozen v1 fallback, and verifies exact track bytes and SHA-256. | `src\analysis\precomputedBallTrack.test.ts` |
 | Illegal schemas, coordinate-bearing ambiguous/abstained frames, digest failures, cancellation, stale runs, and independently revisioned ball-cache reuse fail closed without hiding pose playback. | `src\analysis\precomputedBallTrack.test.ts`, `src\App.test.tsx` |
 | Ball frame selection is nearest and bounded; marker radius and observed-only trail limits/reset rules are deterministic. | `src\analysis\ballOverlayModel.test.ts`, `src\components\BallOverlay.test.tsx` |
-| Shot navigation appears only when a pose-derived movement segment overlaps direct observed ball evidence; timeline and list controls seek to the selected range. | `src\components\ShotSegments.test.tsx`, `src\App.test.tsx` |
+| Shot navigation appears only when a pose-derived movement segment overlaps direct observed ball evidence; overlapping fallback windows are consolidated, and timeline/list controls seek to the selected range. | `src\components\ShotSegments.test.tsx`, `src\App.test.tsx` |
 
 ## Current release boundary
 

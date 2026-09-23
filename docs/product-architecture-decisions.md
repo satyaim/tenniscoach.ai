@@ -11,7 +11,7 @@ The resolved MVP is therefore a **video evidence reviewer**, not an automated ce
 1. Upload one local MP4, MOV, or WebM clip up to 30 seconds and 200 MB.
 2. Create a temporary object URL immediately so the real source video remains visible and playable independently of analysis.
 3. Hash the source locally, reuse an exact compatible derived pose artifact when available, or load MediaPipe Pose Landmarker Lite and sample the decoded video at up to 6 Hz with a 180-frame cap. The analyzer permits conservative image-plane observations at 6 Hz but withholds speed magnitude below 30 Hz.
-4. Automatically choose a player only when the tracker produces a recommendation. When multiple tracks are a near-tie, publish no observations until the user explicitly chooses Player A/B from settings; the result records `selectionMethod: manual`.
+4. Automatically choose one primary player using persistence, visible-body coverage, image area, and court depth. Secondary or stray pose detections remain internal tracking candidates and are never offered as an analysis choice.
 5. Run the experimental movement segmenter and descriptive pose analyzer. Automatic stroke identity is disabled in this upload flow; low-rate, provisional, or weak evidence abstains.
 6. Review the source video with a timestamp-synchronized pose overlay and evidence-linked observation cards. Any analysis failure leaves normal source playback available.
 7. Independently resolve the full source SHA-256 against
@@ -142,6 +142,9 @@ that same selected player become timeline ranges and a clickable list only when
 an `observed` ball coordinate falls inside the segment's active onset-to-offset
 window. Selecting a range seeks to its onset. This temporal overlap supports
 navigation only; it does not identify physical contact or classify the stroke.
+Because provisional fallback ranges are intentionally broad, overlapping ranges
+are consolidated into a non-overlapping chronological set before display. This
+prevents a follow-through or recovery peak from appearing as an additional shot.
 
 For an exact verified known source, a separate canvas selects the canonical
 BallTrack frame by source timeline and renders only `observed` coordinates.
