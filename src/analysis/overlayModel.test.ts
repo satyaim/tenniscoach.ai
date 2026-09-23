@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { demoFrames } from './demoFixture'
 import { heuristicAnalyzer } from './heuristicAnalyzer'
-import { chooseWebmMimeType, liveOverlayStatus, overlayAtTime } from './overlayModel'
+import {
+  chooseWebmMimeType,
+  liveOverlayStatus,
+  overlayAtTime,
+  poseFrameAtTime,
+  trackedPoseFrameAtTime,
+} from './overlayModel'
 import type { StrokeSegment } from './types'
 
 const segment: StrokeSegment = {
@@ -37,6 +43,38 @@ const segment: StrokeSegment = {
 }
 
 describe('annotated overlay model', () => {
+  it('suppresses stale pose frames outside the bounded timestamp tolerance', () => {
+    expect(poseFrameAtTime(demoFrames, demoFrames[3].timestampMs + 20, 50)).toBe(demoFrames[3])
+    expect(poseFrameAtTime(demoFrames, demoFrames.at(-1)!.timestampMs + 500, 120)).toBeUndefined()
+  })
+
+  it('maps the selected stable track without switching candidate identities', () => {
+    const trackB = demoFrames.map((frame) => frame.poses[0].map((point) => ({
+      ...point,
+      x: point.x + 0.2,
+    })))
+    const targetTime = demoFrames[3].timestampMs + 20
+
+    expect(trackedPoseFrameAtTime(demoFrames, trackB, targetTime, 50)?.poses[0][0].x)
+      .toBe(trackB[3][0].x)
+    expect(trackedPoseFrameAtTime(demoFrames, trackB, demoFrames.at(-1)!.timestampMs + 500, 120))
+      .toBeUndefined()
+  })
+
+  it('uses the nearest eligible track pose when the nearest raw frame missed that player', () => {
+    const frames = [
+      { timestampMs: 0, poses: [demoFrames[0].poses[0]] },
+      { timestampMs: 100, poses: [demoFrames[1].poses[0]] },
+      { timestampMs: 180, poses: [demoFrames[2].poses[0]] },
+    ]
+    const playerB = demoFrames[1].poses[0].map((point) => ({ ...point, x: point.x + 0.25 }))
+    const intermittentTrack = [undefined, playerB, undefined]
+
+    expect(trackedPoseFrameAtTime(frames, intermittentTrack, 0)?.timestampMs).toBe(100)
+    expect(trackedPoseFrameAtTime(frames, intermittentTrack, 175)?.poses[0]).toBe(playerB)
+    expect(trackedPoseFrameAtTime(frames, intermittentTrack, 300, 120)).toBeUndefined()
+  })
+
   it('selects stable event labels and evidence-aware cues', async () => {
     const result = await heuristicAnalyzer.analyze({
       frames: demoFrames,

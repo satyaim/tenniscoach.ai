@@ -6,14 +6,14 @@ The target user is an adult beginner-to-intermediate player reviewing fixed-came
 
 The resolved MVP is therefore a **video evidence reviewer**, not an automated certified coach. It provides neutral live framing, automatic post-session movement chapters, pose overlays, descriptive 2D observations, explicit uncertainty, and optional coach-reviewed rubrics later. Unverified clips receive no authoritative drill. Unsupported evidence stays visible and reviewable rather than being discarded.
 
-## Current journey
+## Current public POC journey
 
-1. Select **LIVE / REAL-TIME** for webcam framing and coarse provisional motion, or **POST-SESSION** for upload/recording review. Demo catalog metadata remains in the source, but sample media is not distributed.
-2. Decode locally and extract timestamped poses with an isolated MediaPipe graph per offline video or live camera session.
-3. If two players persist, confirm Player A/B once.
-4. Run the experimental causal movement segmenter across the selected player track.
-5. Automatically analyze every final chapter. When no range finalizes, preserve the strongest lower-evidence proposals as dashed review chapters with possible-movement markers and withheld descriptors. Mixed final/provisional preservation is a known baseline limitation.
-6. Review all chapters on one source-video timeline, navigate previous/next, add or move a manual review marker, and optionally export an annotated WebM.
+1. Upload one local MP4, MOV, or WebM clip up to 30 seconds and 200 MB.
+2. Create a temporary object URL immediately so the real source video remains visible and playable independently of analysis.
+3. Hash the source locally, reuse an exact compatible derived pose artifact when available, or load MediaPipe Pose Landmarker Lite and sample the decoded video at up to 6 Hz with a 180-frame cap. The analyzer permits conservative image-plane observations at 6 Hz but withholds speed magnitude below 30 Hz.
+4. Automatically choose a player only when the tracker produces a recommendation. When multiple tracks are a near-tie, publish no observations until the user explicitly chooses Player A/B from settings; the result records `selectionMethod: manual`.
+5. Run the experimental movement segmenter and descriptive pose analyzer. Automatic stroke identity is disabled in this upload flow; low-rate, provisional, or weak evidence abstains.
+6. Review the source video with a timestamp-synchronized pose overlay and evidence-linked observation cards. Any analysis failure leaves normal source playback available.
 
 ## Architecture
 
@@ -38,7 +38,8 @@ flowchart LR
 
 Key files:
 
-- `src\analysis\poseExtractor.ts` — local MediaPipe adapter, GPU/CPU fallback, monotonic timestamps, separate live/offline graph lifecycles, approximately 16 pose samples/sec up to 320 samples.
+- `src\analysis\poseExtractor.ts` — local MediaPipe adapter, pinned runtime/model manifest, SHA-256 verification of the same-origin model artifact, GPU/CPU fallback, monotonic timestamps, separate live/offline graph lifecycles, ordered sampling up to 6 Hz and 180 samples, progressive batches, yielding, abort-aware seeking, and cancellation-safe initialization/cleanup.
+- `src\analysis\videoAnalysisPipeline.ts` — source hashing, compatible pose-cache reuse, progressive extraction, automatic player selection, movement segmentation, conservative analysis, progress, and stale-run cancellation boundary.
 - `src\analysis\playerTracker.ts` — short-lived A/B tracks and transparent larger/lower persistent-track recommendation.
 - `src\analysis\strokeSegmenter.ts` — temporary causal change-point baseline. It never scans future samples while an event is active. Finalization requires pre/post context, valid samples around the peak, pose/scale evidence, duration bounds, and effective sampling. Failed finalization produces provisional ranges instead of blocking playback.
 - `src\analysis\heuristicAnalyzer.ts` — image-plane observations and explicit abstention. Provisional ranges return no descriptors or coaching.
@@ -64,7 +65,7 @@ Diagnostics record actual timestamps, median interval, interval IQR, maximum gap
 | Decision | Accepted reasoning | Revisit trigger |
 |---|---|---|
 | Browser-local React/TypeScript/Vite | No credentials/backend; easy camera, canvas, tests, and local privacy. | Accounts, shared progress, or server inference becomes a validated requirement. |
-| MediaPipe Pose Landmarker | Maintained browser runtime and useful 33-landmark coverage. | A licensed challenger demonstrates measured tennis accuracy/latency benefit with fallback. |
+| MediaPipe Pose Landmarker Lite float16/v1 with Tasks Vision 1.0.1 | Apache-2.0 browser runtime, official Google artifact copied to a versioned same-origin path and verified as SHA-256 `59929e…d574a`, useful 33-landmark coverage, GPU/CPU fallback, and about 5.8 MB model size. The release includes the exact Apache-2.0 license text and a MediaPipe attribution/upstream-NOTICE audit in `public\models`. Public documentation does not disclose a complete training-data inventory; it is general-purpose and not tennis-validated. | A rights-cleared challenger demonstrates measured tennis-domain accuracy/latency benefit with equivalent privacy, integrity, and fallback. |
 | No scores, confidence percentages, or contact timing | Current evidence is not calibrated to correctness and lacks ball/racket truth. | Coach-labelled held-out validation proves a declared rubric. |
 | Automatic full-video chapters | Review resembles sports-video chapters and avoids a candidate-selection gate. | Validated temporal model changes chapter semantics. |
 | A provisional review path survives strict gates | When no chapter finalizes, segmentation uncertainty must not remove source playback or useful estimates. | Extend the validated temporal model to preserve mixed final/provisional candidates. |
@@ -114,4 +115,8 @@ The temporary rules are limited to orchestration, evidence eligibility, safety, 
 
 ## Privacy and safety
 
-Video stays local. The model/runtime are fetched from their documented CDN on first use. Raw decoded frames are not persisted. Derived source metadata, pose landmarks, and movement chapters may persist in browser IndexedDB under content-addressed keys; the UI exposes their cache status and a clear action. Object URLs are never cached. No upload, telemetry, automatic video export, or ball-provider execution exists. Export is explicit and audio-free. Guidance is general 2D movement observation; users should stop with pain, numbness, dizziness, or instability.
+Video stays local. The exact MediaPipe WASM runtime is fetched from its pinned jsDelivr URL on first use; the model is fetched from a versioned same-origin path and SHA-256 verified before initialization. "Local video processing" therefore does not mean fully offline runtime delivery. Raw decoded frames are not persisted. Derived source metadata, pose landmarks, and movement chapters may persist in browser IndexedDB under content-addressed keys that include the verified model digest; the settings panel exposes a clear action. Object URLs are never cached. No upload, telemetry, automatic video export, ball/court provider, contact detector, tactical inference, or medical/correctness claim exists. Guidance is general 2D movement observation.
+
+## Pose overlay rendering decision
+
+The active upload renderer uses a DPR-aware canvas over the intrinsic video aspect ratio. It draws the explicitly selected player's nearest eligible pose frame only, with a bounded timestamp tolerance and no landmark interpolation. Primary pose evidence is cyan; magenta is reserved for an intentionally requested secondary track and is not shown in the default analysis. Landmarks below 0.45 visibility are omitted. Joints are circular four-source-pixel marks and limbs are rounded semi-transparent four-source-pixel strokes, including eligible ankle/heel/toe links. Stale overlays are suppressed. No ball marker, trail, court overlay, or contact cue is rendered.

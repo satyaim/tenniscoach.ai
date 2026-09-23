@@ -5,6 +5,7 @@ import {
   createStageCacheKey,
   IndexedDbArtifactStore,
   MemoryArtifactStore,
+  sha256Blob,
   type ArtifactStore,
   type StageCacheIdentity,
 } from './analysisCache'
@@ -31,6 +32,13 @@ const valid = (value: unknown): value is { value: number } =>
   Boolean(value && typeof value === 'object' && typeof (value as { value?: unknown }).value === 'number')
 
 describe('AnalysisArtifactCache', () => {
+  it('aborts source hashing before publishing an identity', async () => {
+    const controller = new AbortController()
+    const hashing = sha256Blob(new Blob([new Uint8Array(4 * 1024 * 1024)]), controller.signal)
+    controller.abort()
+    await expect(hashing).rejects.toMatchObject({ name: 'AbortError' })
+  })
+
   it('reuses an exact immutable key', async () => {
     const cache = new AnalysisArtifactCache(new MemoryArtifactStore())
     await cache.write(identity(), { value: 1 }, valid)

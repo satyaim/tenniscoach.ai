@@ -1,22 +1,57 @@
-# AI Tennis Coach POC
+# TennisCoach.AI
 
-A Phase 0, local-first React/TypeScript proof of concept for a tennis video
-review experience. This code-only release contains the hack-demo interface and
-the underlying browser analysis modules, but intentionally ships no video,
-dataset, generated result, model weight, or research artifact.
+A local-first React/TypeScript POC that analyzes a short uploaded tennis video
+in the browser. It runs a learned pose model against the selected file, draws a
+time-aligned body skeleton over the real video, and presents conservative
+movement observations linked to visible pose evidence.
 
 ## Current capabilities
 
-- **Upload-only demo:** choosing a local file starts an exact four-second
-  presentation state and then opens a prepared-result screen.
-- **Code-only result:** the result area clearly states that the demonstration
-  video asset is not included in this source release; it does not display,
-  retain, or upload the selected file.
-- **Prepared UI cues:** sample coaching-card presentation is included as static
-  interface content only, not as output derived from the selected video.
-- **Analysis foundation:** deterministic pose, tracking, segmentation, cache,
-  and evidence-boundary modules remain in source for continued development and
-  testing, but are not invoked by the code-only hack-demo screen.
+- **Real local upload:** MP4, MOV, or WebM clips up to 30 seconds and 200 MB are
+  opened through a temporary browser object URL. The selected video is not sent
+  to an application server.
+- **Learned pose inference:** MediaPipe Tasks Vision 1.0.1 runs the official
+  Pose Landmarker Lite float16/v1 bundle with GPU-first and CPU-fallback
+  execution.
+- **Progressive analysis:** the UI reports real model/inference progress and
+  supports cancellation, retry, and a new upload without a prepared timer.
+- **Conservative sampling:** uploaded clips are sampled at up to 6 Hz with a
+  180-frame cap; speed magnitude remains withheld below 30 Hz and observations
+  abstain below 6 Hz.
+- **Synchronized replay:** normalized pose landmarks are aligned to the
+  intrinsic video aspect ratio and selected by source-media timestamp.
+- **Evidence-linked feedback:** visible image-plane posture and movement
+  observations include evidence, reliability, and explicit abstention.
+- **Automatic primary player:** the most stable/near player track is selected
+  by default. If two tracks exist, the top-right settings panel can switch the
+  analyzed player without rerunning pose inference.
+- **Derived-only cache:** complete pose artifacts may be reused from local
+  IndexedDB. Source video bytes, object URLs, decoded frames, and pixel buffers
+  are not persisted.
+- **Failure-safe playback:** decode, model, pose, tracking, segmentation, or
+  cache failures do not remove the ordinary uploaded-video player.
+
+## Model and provenance
+
+| Item | Value |
+|---|---|
+| Runtime | `@mediapipe/tasks-vision` 1.0.1 |
+| Runtime license | Apache-2.0 |
+| Model | Google MediaPipe Pose Landmarker Lite, float16 bundle version 1 |
+| Model family | BlazePose GHUM |
+| Model artifact | Versioned same-origin copy of the official Google bundle |
+| Model size | About 5.8 MB |
+| Integrity | SHA-256 `59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a` |
+| Delivery | Exact-version jsDelivr WASM plus a self-hosted verified model artifact |
+| Third-party terms | [Apache License 2.0](public/models/LICENSE-APACHE-2.0.txt) and [MediaPipe attribution](public/models/ATTRIBUTION.md) |
+
+The first analysis downloads the exact MediaPipe WASM runtime from jsDelivr if
+it is not already in the browser HTTP cache. The model is served by the same
+TennisCoach.AI origin and is cryptographically verified before initialization.
+Neither request includes the selected video or derived landmarks. Public
+MediaPipe documentation does not disclose a complete inventory of the model's
+training data. This general pose model is not validated as a tennis stroke
+classifier or certified coaching system.
 
 ## Setup
 
@@ -27,8 +62,8 @@ npm ci
 npm run dev
 ```
 
-Open the local URL printed by Vite. Any selected file remains local and is used
-only to advance the demonstration interface.
+Open the local URL printed by Vite and upload a short, rights-cleared tennis
+clip. Keep the full player visible for the most useful result.
 
 ## Validate
 
@@ -36,56 +71,50 @@ only to advance the demonstration interface.
 npm run validate
 ```
 
-This runs ESLint, TypeScript checks, Vitest, the production build, and a static
-smoke check.
+This runs ESLint, TypeScript checks, Vitest, the production build, and the
+static smoke check.
 
-## Safety and uncertainty boundary
+## Evidence boundary
 
-This POC is an evidence reviewer, not a certified coach, medical device, or
-injury-prevention system. It does **not** establish racket-ball contact,
-early/on-time/late timing, ball speed or spin, force, true weight transfer,
-racket-face angle, diagnosis, injury risk, or technique correctness.
-Categorical evidence bands are not probabilities or grades. Automatic stroke
-families and chapter boundaries are unverified hypotheses and may abstain.
-Users should stop activity and seek qualified help for pain, numbness,
-dizziness, instability, or medical concerns.
+The POC may describe visible 2D stance width, joint-angle changes,
+shoulder-line orientation, pelvis projection within the visible ankle span,
+and hand-path movement when landmark and sampling gates pass.
 
-## Ball research boundary
+It does **not** establish:
 
-The UI contains a fail-closed, model-neutral provider template, but no ball
-model, checkpoint, executable provider, trajectory inference, or contact
-detector is shipped or enabled. Ball-tracking experiments and candidate assets
-remain quarantined research-only work until licensing, redistribution,
-validation, and product gates are satisfied.
+- racket or ball tracking;
+- physical racket-ball contact or impact time;
+- early/on-time/late timing relative to impact;
+- validated forehand, backhand, or serve identity;
+- ball speed, spin, trajectory, or racket-face angle;
+- true depth, force, torque, joint loading, center of mass, or weight transfer;
+- technique correctness, diagnosis, injury risk, or medical guidance.
 
-## Public release contents
-
-This first public release intentionally excludes:
-
-- all private source videos and derived screenshots, evaluations, annotations,
-  provenance, and exports;
-- all sample videos, datasets, CSV annotations, and generated evidence;
-- model weights, checkpoints, research experiments, and quarantined artifacts;
-- local caches, logs, browser profiles, build outputs, and dependency folders;
-- internal hackathon and SharePoint material.
-
-The source retains a catalog schema and rights metadata used by local
-maintainers, but its referenced media is not included. Supply only
-rights-cleared media locally. Research/evaluation assets are not part of this
-distribution.
+Automatic movement ranges are review aids. Low-quality or provisional evidence
+is shown as unavailable instead of being converted into a prepared result.
 
 ## Privacy
 
-There is no application backend, account, telemetry upload, or automatic media
-export. The code-only demo does not create an object URL for the selected file
-or persist its contents.
+- Video processing occurs in the browser.
+- No application backend, account, telemetry upload, or automatic media export
+  is used.
+- The source file remains a temporary `blob:` URL and is revoked on replacement
+  or exit.
+- Model/runtime files may be downloaded on first use.
+- The model file is served from the TennisCoach.AI origin and verified by
+  SHA-256; the exact MediaPipe WASM runtime is currently loaded from jsDelivr.
+- Validated derived pose JSON may be stored in this browser until the user
+  clears the local analysis cache from settings.
 
 ## License
 
 No open-source license has been granted for this repository. Public visibility
-does not grant permission to copy, modify, redistribute, or reuse the code or
-other contents. Third-party dependencies remain subject to their own licenses.
+does not grant permission to copy, modify, redistribute, or reuse its contents.
+Third-party dependencies and model artifacts remain subject to their own
+licenses and notices. The redistributed MediaPipe model and runtime are covered
+by the included [Apache License 2.0 text](public/models/LICENSE-APACHE-2.0.txt)
+and [upstream attribution record](public/models/ATTRIBUTION.md).
 
 See [product and architecture decisions](docs/product-architecture-decisions.md)
-and the [QA strategy](docs/test-strategy.md) for the detailed evidence and
-abstention design.
+and the [QA strategy](docs/test-strategy.md) for the detailed evidence,
+abstention, and cache design.

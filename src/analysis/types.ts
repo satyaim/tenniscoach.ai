@@ -1,4 +1,4 @@
-export type Handedness = 'right' | 'left'
+export type Handedness = 'right' | 'left' | 'unknown'
 export type StrokeType = 'auto' | 'forehand' | 'backhand' | 'serve'
 export type ResolvedStroke = Exclude<StrokeType, 'auto'> | 'unknown'
 export type ReliabilityBand = 'high' | 'medium' | 'low' | 'insufficient'
@@ -64,6 +64,7 @@ export interface AnalysisInput {
   durationMs: number
   handedness: Handedness
   requestedStroke: StrokeType
+  allowStrokeHypothesis?: boolean
   source: 'demo' | 'upload' | 'camera'
   coachingMode?: 'observations-only' | 'reviewed-rubric'
   captureContext: CaptureContext

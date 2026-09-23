@@ -8,6 +8,18 @@ Privacy leakage, unsupported coaching claims, timestamp poisoning across videos,
 
 | Criterion | Evidence |
 |---|---|
+| Upload creates a real object URL and the actual source video replaces the prepared code-only placeholder. | `src\App.test.tsx` |
+| The upload → analyzing → analysis-ready journey is driven by the real pipeline rather than an exact timer. | `src\App.test.tsx` |
+| Inference failure retains normal source playback and exposes retry/new-upload actions. | `src\App.test.tsx` |
+| Automatic stroke identity remains unavailable in the uploaded-video POC. | `src\analysis\heuristicAnalyzer.test.ts` |
+| The movement segmenter supports handedness-neutral internal detection. | `src\analysis\strokeSegmenter.test.ts` |
+| Handedness remains unknown; unstable active-wrist evidence abstains. | `src\analysis\heuristicAnalyzer.test.ts` |
+| Ambiguous multiple tracks require explicit selection and publish no observations. | `src\analysis\videoAnalysisPipeline.test.ts`, `src\App.test.tsx` |
+| Source hashing, model loading, and repeated seeks honor cancellation; a late landmarker is closed. | `src\analysis\analysisCache.test.ts`, `src\analysis\poseExtractor.test.ts` |
+| The self-hosted model is source-controlled, copied into the build, and SHA-256 verified; required license/attribution files ship with it; GPU initialization falls back to CPU. | `scripts\smoke.mjs`, `src\analysis\poseExtractor.test.ts`, `scripts\browser-pose-validation.mjs` |
+| Stale pose frames are suppressed and portrait/landscape contain geometry preserves source aspect. | `src\analysis\overlayModel.test.ts`, `src\analysis\videoGeometry.test.ts` |
+| Result playback advances overlay selection on every presented video frame, with `timeupdate` and `seeked` retained as browser fallbacks. | `src\components\PoseViewer.test.tsx` |
+| Conservative image-plane observations may remain available at 6 Hz while speed magnitude is withheld below 30 Hz. | `src\analysis\heuristicAnalyzer.test.ts` |
 | Camera denial is recoverable and demo/upload remain available. | `src\App.test.tsx` |
 | Upload type/size and corrupt/short/no-person cases fail explicitly. | App/analyzer tests |
 | Offline clips and live camera never share a MediaPipe timestamp graph. | pose adapter design plus sequential real-browser smoke |
@@ -20,7 +32,7 @@ Privacy leakage, unsupported coaching claims, timestamp poisoning across videos,
 | One replay contains chapter ranges, possible-movement markers, scrub, previous/next, and active selection. | App/overlay tests and browser evidence |
 | Manual add/move marker retains `user-adjusted` provenance and remains provisional. | UI implementation; browser exploratory check |
 | WebM export is explicit and unsupported APIs fail honestly. | overlay capability and App tests |
-| Sampling below 30 Hz abstains from peak-dependent descriptors and automatic stroke hypotheses. | `src\analysis\heuristicAnalyzer.test.ts` |
+| Sampling below 6 Hz abstains from movement descriptors; speed magnitude remains withheld below 30 Hz and automatic stroke hypotheses stay disabled in upload analysis. | `src\analysis\heuristicAnalyzer.test.ts` |
 | Progressive batch sizes converge to deterministic chapter IDs and later movements do not mutate finalized chapter data. | `src\analysis\strokeSegmenter.test.ts` |
 | Provider metadata cannot activate ball inference without eligible lifecycle, cleared rights, explicit product enablement, availability, and an executable binding. | `src\analysis\providerRegistry.test.ts` |
 | Cache keys change on source/model ID/model version/runtime ID/runtime version/checkpoint/config/contract/decoder/dependency changes while independent pose keys survive ball-model switches. | `src\analysis\analysisCache.test.ts` |
@@ -33,11 +45,20 @@ Privacy leakage, unsupported coaching claims, timestamp poisoning across videos,
 
 ## Current release boundary
 
-The public source release requires lint, TypeScript, Vitest, production build, and static smoke checks. Private media, sample datasets, generated browser evidence, and evidence-only tests are not shipped. Maintainers may run rights-cleared real-browser evaluation locally, but those artifacts are outside the public release manifest. Chrome desktop is verified; Edge is the compatible target. Safari/Firefox export varies by canvas capture, MediaRecorder, and codec support.
+The public source release requires lint, TypeScript, Vitest, production build, and static smoke checks. Private media, sample datasets, generated browser evidence, and evidence-only tests are not shipped. Maintainers run rights-cleared real-browser evaluation locally; those source clips and results remain outside the public release manifest. Chrome desktop is the primary POC target and Edge is the compatible target. Safari/Firefox and codec combinations remain best-effort until measured.
+
+The smoke gate checks that the exact model path is in Git when repository
+metadata is available, then verifies the source and built copies against the
+declared 5,777,746-byte size and SHA-256. It also requires the Apache-2.0
+license and MediaPipe attribution files in the production build. The separate
+clean release-validation procedure creates an export from the Git index so
+machine-local ignored files cannot satisfy the build and browser gates.
+
+`scripts\browser-pose-validation.mjs` runs the actual model in installed Chrome and Edge on port 5174, leaving 5173 untouched. It accepts external rights-cleared landscape and portrait clip paths and covers first-run model load/inference, cache miss/hit, repeated seek, immediate cancellation, cancellation during sampled seeking, forced CPU execution plus unit-tested GPU fallback, portrait/landscape geometry, decode-failure playback, and object-URL replacement cleanup. The clips remain outside the repository.
 
 Known blockers for production:
 
-- Offline extraction uses repeated HTML-video seeks and synchronous MediaPipe calls; it is slow. Chapter estimates now publish in batches, but inference is not yet moved to a dedicated worker or a formally bounded scheduler.
+- Offline extraction uses repeated HTML-video seeks and synchronous MediaPipe calls. It yields every six samples and publishes progress batches, but inference is not yet moved to a dedicated worker or a formally bounded scheduler.
 - Pose inference is not worker-backed; cache publication is cancellation-safe, but MediaPipe execution itself remains synchronous and page-lifetime-bound.
 - Chapter boundaries and stroke family hypotheses are not coach-labelled or calibrated.
 - Ball, racket, court calibration, metric depth, and true contact remain absent.

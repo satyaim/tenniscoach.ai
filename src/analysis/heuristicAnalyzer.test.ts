@@ -116,10 +116,9 @@ describe('HeuristicStrokeAnalyzer', () => {
   })
 
   it.each([
-    [14.9, 'provisional'],
-    [16, 'final'],
-    [29.99, 'final'],
-  ] as const)('abstains from peak-dependent descriptions at %s Hz', async (effectiveFps, status) => {
+    [5.9, 'final'],
+    [30, 'provisional'],
+  ] as const)('abstains when the evidence gate fails at %s Hz', async (effectiveFps, status) => {
     const result = await analyzer.analyze({
       ...input,
       segment: {
@@ -137,6 +136,20 @@ describe('HeuristicStrokeAnalyzer', () => {
       item.state === 'not_observable' || item.state === 'not_applicable')).toBe(true)
   })
 
+  it('allows conservative image-plane observations at 6 Hz while withholding speed magnitude', async () => {
+    const result = await analyzer.analyze({
+      ...input,
+      segment: {
+        ...segment,
+        peakWristSpeed: undefined,
+        diagnostics: { ...segment.diagnostics, effectiveFps: 6 },
+      },
+    })
+
+    expect(result.observations.some((item) => item.state === 'present' || item.state === 'partial')).toBe(true)
+    expect(result.segment.peakWristSpeed).toBeUndefined()
+  })
+
   it('qualifies an automatic stroke hypothesis when descriptor evidence is eligible', async () => {
     const result = await analyzer.analyze({
       ...input,
@@ -147,5 +160,44 @@ describe('HeuristicStrokeAnalyzer', () => {
     expect(result.strokePresentation.provenance).toBe('automatic')
     expect(result.strokePresentation.label).toMatch(/-like motion$/)
     expect(result.strokePresentation.label).not.toMatch(/^(Forehand|Backhand|Serve)$/)
+  })
+
+  it('keeps automatic stroke identity unavailable for the uploaded-video POC', async () => {
+    const result = await analyzer.analyze({
+      ...input,
+      requestedStroke: 'auto',
+      allowStrokeHypothesis: false,
+      source: 'upload',
+      segment,
+    })
+
+    expect(result.stroke).toBe('unknown')
+    expect(result.strokePresentation).toEqual({
+      label: 'unknown motion',
+      provenance: 'unknown',
+    })
+  })
+
+  it('keeps handedness unknown and abstains when no stable active wrist exists', async () => {
+    const symmetric = demoFrames.map((frame) => ({
+      ...frame,
+      poses: [frame.poses[0].map((point, index) => index === 15 ? { ...frame.poses[0][16] } : point)],
+    }))
+    const result = await analyzer.analyze({
+      ...input,
+      frames: symmetric,
+      handedness: 'unknown',
+      requestedStroke: 'auto',
+      allowStrokeHypothesis: false,
+    })
+
+    expect(result.handedness).toBe('unknown')
+    expect(result.observations.find((item) => item.id === 'spacing')).toMatchObject({
+      state: 'not_observable',
+      abstentionReason: expect.stringMatching(/stable active wrist/i),
+    })
+    expect(result.observations.find((item) => item.id === 'postPeakPath')).toMatchObject({
+      state: 'not_observable',
+    })
   })
 })

@@ -4,6 +4,12 @@ import { segmentStrokes } from './strokeSegmenter'
 import type { StrokeSegment } from './types'
 
 describe('rule-based stroke candidate segmenter', () => {
+  it('can segment movement without requiring a handedness choice', () => {
+    const segments = segmentStrokes(demoFrames, 'auto')
+    expect(segments.length).toBeGreaterThan(0)
+    expect(segments.every((segment) => segment.id.startsWith('movement-'))).toBe(true)
+  })
+
   it('finds individual movement candidates rather than returning the full clip', () => {
     const first = demoFrames.map((frame) => ({ ...frame }))
     const second = demoFrames.map((frame) => ({

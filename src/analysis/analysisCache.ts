@@ -102,8 +102,38 @@ export const sha256Text = async (value: string) => {
   return `sha256:${[...new Uint8Array(digest)].map((item) => item.toString(16).padStart(2, '0')).join('')}`
 }
 
-export const sha256Blob = async (blob: Blob) => {
-  const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer())
+const abortError = () => new DOMException('Analysis cancelled.', 'AbortError')
+
+const readBlob = (blob: Blob, signal?: AbortSignal) => {
+  if (!signal || typeof FileReader === 'undefined') return blob.arrayBuffer()
+  if (signal.aborted) return Promise.reject(abortError())
+  return new Promise<ArrayBuffer>((resolve, reject) => {
+    const reader = new FileReader()
+    const onAbort = () => reader.abort()
+    const cleanup = () => signal.removeEventListener('abort', onAbort)
+    reader.onload = () => {
+      cleanup()
+      resolve(reader.result as ArrayBuffer)
+    }
+    reader.onerror = () => {
+      cleanup()
+      reject(reader.error ?? new Error('The source video could not be read.'))
+    }
+    reader.onabort = () => {
+      cleanup()
+      reject(abortError())
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
+    reader.readAsArrayBuffer(blob)
+  })
+}
+
+export const sha256Blob = async (blob: Blob, signal?: AbortSignal) => {
+  if (signal?.aborted) throw abortError()
+  const bytes = await readBlob(blob, signal)
+  if (signal?.aborted) throw abortError()
+  const digest = await crypto.subtle.digest('SHA-256', bytes)
+  if (signal?.aborted) throw abortError()
   return `sha256:${[...new Uint8Array(digest)].map((item) => item.toString(16).padStart(2, '0')).join('')}`
 }
 

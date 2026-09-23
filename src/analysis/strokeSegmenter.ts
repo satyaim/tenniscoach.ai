@@ -16,20 +16,23 @@ const bandFor = (value: number, high: number, medium: number, low: number): Reli
 
 export const segmentStrokes = (
   frames: PoseFrame[],
-  handedness: 'right' | 'left',
+  handedness: 'right' | 'left' | 'auto',
 ): StrokeSegment[] => {
-  const wristIndex = handedness === 'right' ? 16 : 15
+  const wristIndexes = handedness === 'auto' ? [15, 16] : [handedness === 'right' ? 16 : 15]
   const intervals = frames.slice(1).map((frame, index) => frame.timestampMs - frames[index].timestampMs).filter((value) => value > 0)
   const medianIntervalMs = median(intervals)
   const intervalIqrMs = percentile(intervals, 0.75) - percentile(intervals, 0.25)
   const maxGapMs = Math.max(...intervals, 0)
   const speeds = frames.map((frame, index) => {
     if (index === 0 || frame.poses.length !== 1 || frames[index - 1].poses.length !== 1) return Number.NaN
-    const current = frame.poses[0]?.[wristIndex]
-    const previous = frames[index - 1].poses[0]?.[wristIndex]
     const elapsed = frame.timestampMs - frames[index - 1].timestampMs
-    if (!current || !previous || elapsed <= 0 || elapsed > Math.max(250, medianIntervalMs * 2)) return Number.NaN
-    return (distance(current, previous) / elapsed) * 1000
+    if (elapsed <= 0 || elapsed > Math.max(250, medianIntervalMs * 2)) return Number.NaN
+    const wristSpeeds = wristIndexes.flatMap((wristIndex) => {
+      const current = frame.poses[0]?.[wristIndex]
+      const previous = frames[index - 1].poses[0]?.[wristIndex]
+      return current && previous ? [(distance(current, previous) / elapsed) * 1000] : []
+    })
+    return wristSpeeds.length ? Math.max(...wristSpeeds) : Number.NaN
   })
   const segments: StrokeSegment[] = []
   let onsetCandidate: number | undefined
@@ -117,7 +120,7 @@ export const segmentStrokes = (
       duration <= 3500 &&
       validBefore >= 5 &&
       validAfter >= 5 &&
-      effectiveFps >= 15 &&
+      effectiveFps >= 6 &&
       poseEvidence !== 'insufficient' &&
       boundaryReliability !== 'insufficient'
     if (valid) {

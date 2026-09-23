@@ -22,6 +22,38 @@ export const frameIndexAtTime = (frames: PoseFrame[], timestampMs: number) => {
   return nearestFrame(frames, timestampMs)
 }
 
+export const poseFrameAtTime = (
+  frames: PoseFrame[],
+  timestampMs: number,
+  toleranceMs = 180,
+) => {
+  if (!frames.length) return undefined
+  const frame = frames[frameIndexAtTime(frames, timestampMs)]
+  return Math.abs(frame.timestampMs - timestampMs) <= toleranceMs ? frame : undefined
+}
+
+export const trackedPoseFrameAtTime = (
+  frames: PoseFrame[],
+  trackedPoses: Array<PoseFrame['poses'][number] | undefined>,
+  timestampMs: number,
+  toleranceMs = 180,
+) => {
+  if (!frames.length) return undefined
+  const index = frames.reduce((best, frame, candidate) => {
+    if (!trackedPoses[candidate]) return best
+    if (best < 0) return candidate
+    return Math.abs(frame.timestampMs - timestampMs) <
+      Math.abs(frames[best].timestampMs - timestampMs)
+      ? candidate
+      : best
+  }, -1)
+  if (index < 0) return undefined
+  const sourceFrame = frames[index]
+  const pose = trackedPoses[index]
+  if (!pose || Math.abs(sourceFrame.timestampMs - timestampMs) > toleranceMs) return undefined
+  return { timestampMs: sourceFrame.timestampMs, poses: [pose] } satisfies PoseFrame
+}
+
 export const overlayAtTime = (
   frames: PoseFrame[],
   result: AnalysisResult,

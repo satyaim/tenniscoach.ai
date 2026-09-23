@@ -24,6 +24,7 @@ const resolveStroke = (
   wristIndex: number,
 ): { stroke: ResolvedStroke; source: AnalysisResult['strokeSource'] } => {
   if (input.requestedStroke !== 'auto') return { stroke: input.requestedStroke, source: 'selected' }
+  if (input.allowStrokeHypothesis === false) return { stroke: 'unknown', source: 'unknown' }
   const wristAboveHeadRatio =
     poses.filter((pose) => pose[wristIndex]?.y < pose[0]?.y - 0.02).length / Math.max(1, poses.length)
   if (wristAboveHeadRatio >= 0.18) return { stroke: 'serve', source: 'hypothesis' }
@@ -53,6 +54,20 @@ const strokePresentation = (
   return { label: 'unknown motion', provenance: 'unknown' }
 }
 
+const activeWristFor = (frames: AnalysisInput['frames']) => {
+  const movement = (index: 15 | 16) => frames.slice(1).reduce((total, frame, frameIndex) => {
+    const current = frame.poses[0]?.[index]
+    const previous = frames[frameIndex].poses[0]?.[index]
+    return current && previous ? total + distance(current, previous) : total
+  }, 0)
+  const left = movement(15)
+  const right = movement(16)
+  const strongest = Math.max(left, right)
+  const weakest = Math.min(left, right)
+  if (strongest <= 0 || strongest / Math.max(weakest, 0.001) < 1.2) return undefined
+  return left > right ? 15 as const : 16 as const
+}
+
 export class HeuristicStrokeAnalyzer implements StrokeAnalyzer {
   readonly id = 'pose-observations-v2'
 
@@ -75,7 +90,7 @@ export class HeuristicStrokeAnalyzer implements StrokeAnalyzer {
     }
     const descriptorEligible =
       input.segment.status === 'final' &&
-      input.segment.diagnostics.effectiveFps >= 30 &&
+      input.segment.diagnostics.effectiveFps >= 6 &&
       ['high', 'medium'].includes(input.segment.poseEvidence) &&
       ['high', 'medium'].includes(input.segment.boundaryReliability)
     if (!descriptorEligible) {
@@ -84,8 +99,8 @@ export class HeuristicStrokeAnalyzer implements StrokeAnalyzer {
       const gateReason =
         input.segment.status !== 'final'
           ? 'The automatic chapter did not meet temporal finalization gates.'
-          : input.segment.diagnostics.effectiveFps < 30
-            ? `Effective sampling was ${input.segment.diagnostics.effectiveFps.toFixed(1)} Hz; peak-dependent descriptors and automatic stroke hypotheses require at least 30 Hz.`
+          : input.segment.diagnostics.effectiveFps < 6
+            ? `Effective sampling was ${input.segment.diagnostics.effectiveFps.toFixed(1)} Hz; movement observations require at least 6 Hz.`
             : 'Pose or boundary evidence was below medium.'
       const unavailable = (id: MeasuredObservation['id'], label: string): MeasuredObservation => ({
         id,
@@ -145,7 +160,12 @@ export class HeuristicStrokeAnalyzer implements StrokeAnalyzer {
       }
     }
 
-    const wristIndex = input.handedness === 'right' ? 16 : 15
+    const wristIndex =
+      input.handedness === 'right'
+        ? 16
+        : input.handedness === 'left'
+          ? 15
+          : activeWristFor(input.frames)
     const shoulderWidths = poses.map((pose) => distance(pose[11], pose[12])).filter((value) => value > 0.025)
     const scale = median(shoulderWidths)
     if (scale <= 0.025) {
@@ -160,20 +180,21 @@ export class HeuristicStrokeAnalyzer implements StrokeAnalyzer {
     const prepPose = input.frames[prepFrame]?.poses[0] ?? poses[0]
     const endPose = [...input.frames].reverse().find((frame) => frame.poses[0])?.poses[0] ?? poses.at(-1)!
     const baseReliability = reliabilityFor(coverage)
-    const { stroke, source } = resolveStroke(input, poses, wristIndex)
+    const { stroke, source } = resolveStroke(input, poses, wristIndex ?? 16)
 
     const startShoulderAngle = angleDegrees(poses[0][11], poses[0][12])
     const prepShoulderAngle = angleDegrees(prepPose[11], prepPose[12])
     const rawOrientationChange = deltaAngle(startShoulderAngle, prepShoulderAngle)
     const orientationChange = Math.min(rawOrientationChange, Math.abs(180 - rawOrientationChange))
     const center = midpoint(peakPose[11], peakPose[12])
-    const separation = distance(peakPose[wristIndex], center) / scale
+    const separation = wristIndex === undefined ? undefined : distance(peakPose[wristIndex], center) / scale
     const pelvisX = midpoint(peakPose[23], peakPose[24]).x
     const ankleLeft = Math.min(peakPose[27].x, peakPose[28].x)
     const ankleRight = Math.max(peakPose[27].x, peakPose[28].x)
     const ankleSpan = Math.max(0.01, ankleRight - ankleLeft)
     const pelvisProjection = (pelvisX - ankleLeft) / ankleSpan
-    const postPeakPath = distance(peakPose[wristIndex], endPose[wristIndex]) / scale
+    const postPeakPath =
+      wristIndex === undefined ? undefined : distance(peakPose[wristIndex], endPose[wristIndex]) / scale
 
     const observations: MeasuredObservation[] = [
       observation({
@@ -185,20 +206,30 @@ export class HeuristicStrokeAnalyzer implements StrokeAnalyzer {
         unit: 'degrees in image plane',
         description: `${orientationChange.toFixed(1)}° of image-plane shoulder-line orientation change was visible before peak wrist speed.`,
       }, baseReliability),
-      stroke === 'serve'
+      wristIndex === undefined
         ? observation({
             id: 'spacing',
-            label: '2D hand-to-torso separation',
+            label: 'Active-wrist to torso separation',
+            state: 'not_observable',
+            reliability: 'insufficient',
+            evidenceBasis: 'Both visible wrists had similar movement; no stable active wrist was selected.',
+            description: 'Active-wrist separation was withheld.',
+            abstentionReason: 'The pose evidence did not identify one stable active wrist.',
+          }, baseReliability)
+        : stroke === 'serve'
+        ? observation({
+            id: 'spacing',
+            label: 'Active-wrist to torso separation',
             state: 'not_applicable',
             reliability: 'insufficient',
             evidenceBasis: 'Groundstroke separation rubric is not applied to serve-shaped movement.',
             description: 'Not evaluated for a serve-shaped sequence.',
             abstentionReason: 'Serve-specific evidence has not been validated.',
           }, baseReliability)
-        : separation > 3.5
+        : separation! > 3.5
           ? observation({
               id: 'spacing',
-              label: '2D hand-to-torso separation',
+              label: 'Active-wrist to torso separation',
               state: 'not_observable',
               reliability: 'insufficient',
               evidenceBasis: 'Peak-frame wrist distance normalized by visible shoulder width.',
@@ -207,12 +238,12 @@ export class HeuristicStrokeAnalyzer implements StrokeAnalyzer {
             }, baseReliability)
           : observation({
               id: 'spacing',
-              label: '2D hand-to-torso separation',
-              state: separation >= 0.8 ? 'present' : 'partial',
+              label: 'Active-wrist to torso separation',
+              state: separation! >= 0.8 ? 'present' : 'partial',
               evidenceBasis: 'Peak-frame wrist distance normalized by visible shoulder width.',
-              measuredValue: Number(separation.toFixed(2)),
+              measuredValue: Number(separation!.toFixed(2)),
               unit: 'shoulder widths',
-              description: `${separation.toFixed(2)} visible shoulder widths at the movement peak.`,
+              description: `${separation!.toFixed(2)} visible shoulder widths from the active wrist to the torso at the movement peak.`,
             }, baseReliability),
       observation({
         id: 'pelvisProjection',
@@ -223,10 +254,20 @@ export class HeuristicStrokeAnalyzer implements StrokeAnalyzer {
         unit: 'normalized ankle span',
         description: `Pelvis projection was ${pelvisProjection.toFixed(2)} across the visible ankle span (0=left ankle, 1=right ankle).`,
       }, baseReliability),
-      postPeakPath > 3.5
+      postPeakPath === undefined
         ? observation({
             id: 'postPeakPath',
-            label: 'Post-peak hand path',
+            label: 'Post-peak active-wrist path',
+            state: 'not_observable',
+            reliability: 'insufficient',
+            evidenceBasis: 'Both visible wrists had similar movement; no stable active wrist was selected.',
+            description: 'Post-peak active-wrist path was withheld.',
+            abstentionReason: 'The pose evidence did not identify one stable active wrist.',
+          }, baseReliability)
+        : postPeakPath > 3.5
+        ? observation({
+            id: 'postPeakPath',
+            label: 'Post-peak active-wrist path',
             state: 'not_observable',
             reliability: 'insufficient',
             evidenceBasis: 'Wrist displacement from movement peak to segmented offset, normalized by shoulder width.',
@@ -235,7 +276,7 @@ export class HeuristicStrokeAnalyzer implements StrokeAnalyzer {
           }, baseReliability)
         : observation({
             id: 'postPeakPath',
-            label: 'Post-peak hand path',
+            label: 'Post-peak active-wrist path',
             state: postPeakPath >= 0.35 ? 'present' : 'partial',
             evidenceBasis: 'Wrist displacement from movement peak to segmented offset, normalized by shoulder width.',
             measuredValue: Number(postPeakPath.toFixed(2)),
@@ -281,15 +322,16 @@ export class HeuristicStrokeAnalyzer implements StrokeAnalyzer {
       },
       trace: [
         { metric: '2D shoulder-line orientation change', value: Number(orientationChange.toFixed(1)), unit: 'degrees', interpretation: 'Image-plane observation' },
-        { metric: '2D hand-to-torso separation', value: separation > 3.5 ? 'withheld' : Number(separation.toFixed(2)), unit: 'shoulder widths', interpretation: 'Image-plane observation' },
+        { metric: '2D active-wrist-to-torso separation', value: separation === undefined || separation > 3.5 ? 'withheld' : Number(separation.toFixed(2)), unit: 'shoulder widths', interpretation: 'Image-plane observation; not handedness' },
         { metric: 'Pelvis projection', value: Number(pelvisProjection.toFixed(2)), unit: 'ankle spans', interpretation: 'Visible-base projection only' },
-        { metric: 'Post-peak hand path', value: postPeakPath > 3.5 ? 'withheld' : Number(postPeakPath.toFixed(2)), unit: 'shoulder widths', interpretation: 'Segmented image-plane path' },
+        { metric: 'Post-peak active-wrist path', value: postPeakPath === undefined || postPeakPath > 3.5 ? 'withheld' : Number(postPeakPath.toFixed(2)), unit: 'shoulder widths', interpretation: 'Segmented image-plane path; not handedness' },
         { metric: 'Landmark coverage', value: Math.round(coverage * 100), unit: '%', interpretation: 'Input evidence coverage, not calibrated confidence' },
       ],
       limitations: [
         'Ball and racket are not tracked; contact and timing are not observable.',
         'All distances and angles are image-plane measurements with shoulder-width normalization.',
         'Stroke family is selected by the user or a coarse pose-shape hypothesis; unknown is allowed.',
+        'Handedness is not inferred; wrist-specific observations use only a stable active-wrist signal and otherwise abstain.',
         'No force, torque, joint loading, true depth, ball speed, spin, or racket-face claim is made.',
       ],
       safety: 'General 2D movement observation only. Stop if you feel pain, numbness, dizziness, or instability.',

@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
-  publicDir: false,
+  publicDir: 'public',
   server: {
     watch: {
       ignored: ['**/*.mp4', '**/*.jpg', '**/artifacts/**'],

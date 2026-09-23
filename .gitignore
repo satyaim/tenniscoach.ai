@@ -40,6 +40,7 @@ src/evaluationEvidence.test.ts
 *.safetensors
 *.tflite
 *.task
+!public/models/pose_landmarker_lite-float16-v1.task
 *.weights
 
 # Machine-local state.
