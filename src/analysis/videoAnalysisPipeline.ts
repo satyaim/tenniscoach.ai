@@ -44,6 +44,7 @@ interface RunOptions {
   file: File
   video: HTMLVideoElement
   signal: AbortSignal
+  sourceHash?: string
   onProgress: (progress: VideoAnalysisProgress) => void
   onBatch?: (frames: PoseFrame[]) => void
 }
@@ -153,6 +154,7 @@ export const runVideoAnalysis = async ({
   file,
   video,
   signal,
+  sourceHash: providedSourceHash,
   onProgress,
   onBatch,
 }: RunOptions): Promise<VideoAnalysisOutput> => {
@@ -162,7 +164,7 @@ export const runVideoAnalysis = async ({
     height: video.videoHeight,
   }
   onProgress({ stage: 'preparing', value: 0.03, message: 'Preparing your private local video…' })
-  const sourceHash = await sha256Blob(file, signal)
+  const sourceHash = providedSourceHash ?? await sha256Blob(file, signal)
   if (signal.aborted) throw new DOMException('Analysis cancelled.', 'AbortError')
 
   const identity = poseIdentity(sourceHash)
@@ -170,6 +172,7 @@ export const runVideoAnalysis = async ({
   let frames: PoseFrame[]
   if (cached.status === 'hit' && cached.artifact) {
     frames = cached.artifact.payload
+    onBatch?.(frames)
     onProgress({ stage: 'finalizing', value: 0.9, message: 'Reusing pose analysis stored in this browser…' })
   } else {
     onProgress({ stage: 'loading-model', value: 0.08, message: 'Loading the pose model…' })
