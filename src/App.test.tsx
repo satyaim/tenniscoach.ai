@@ -10,6 +10,11 @@ import {
   canExportCombinedVideo,
   exportCombinedVideo,
 } from './analysis/videoExport'
+import {
+  COACHING_PROMPT_STORAGE_KEY,
+  DEFAULT_COACHING_ANALYSIS_PROMPT,
+} from './analysis/coachingPrompt'
+import { generateShotInsight, type ShotInsight } from './analysis/shotInsight'
 
 const viewerProbe = vi.hoisted(() => ({
   settings: undefined as unknown,
@@ -27,6 +32,13 @@ vi.mock('./analysis/precomputedBallTrack', async () => {
     './analysis/precomputedBallTrack',
   )
   return { ...actual, loadPrecomputedBallTrack: vi.fn() }
+})
+
+vi.mock('./analysis/shotInsight', async () => {
+  const actual = await vi.importActual<typeof import('./analysis/shotInsight')>(
+    './analysis/shotInsight',
+  )
+  return { ...actual, generateShotInsight: vi.fn() }
 })
 
 vi.mock('./analysis/videoExport', async () => {
@@ -157,6 +169,61 @@ const output = {
   },
 } as unknown as VideoAnalysisOutput
 
+const outputWithShot: VideoAnalysisOutput = {
+  ...output,
+  segments: [output.result.segment],
+}
+
+const readyInsight = (assessment: string): ShotInsight => ({
+  visualFacts: [{
+    fact: 'The feet remain visible.',
+    evidenceTimestamps: ['0.00s'],
+    confidence: 'medium',
+  }],
+  coachRecommendation: {
+    focusArea: 'Recovery position',
+    assessment,
+    whyItMatters: 'A repeatable finish can help organize the next movement.',
+    actionCue: 'Finish, recover, freeze.',
+    drill: {
+      name: 'Recover and freeze',
+      steps: ['Shadow the movement.', 'Recover.', 'Freeze.'],
+      volume: '2 sets of 6',
+      successCheck: 'The finish remains visible and organized.',
+    },
+    evidenceTimestamps: ['0.00s'],
+    confidence: 'medium',
+  },
+  withheld: [],
+})
+
+const availableBallTrack = () => ({
+  status: 'available' as const,
+  track: {
+    schemaVersion: 'precomputed-ball-track.v1' as const,
+    sourceSha256: 'a'.repeat(64),
+    coordinateSpace: {
+      kind: 'intrinsic-source-pixels' as const,
+      origin: 'top-left' as const,
+      xDirection: 'right' as const,
+      yDirection: 'down' as const,
+      width: 1280,
+      height: 720,
+    },
+    timeline: {
+      frameIndexOrigin: 0 as const,
+      timestampRule: 'frameIndex * 1000 / sourceFps' as const,
+      fps: 2,
+      frameCount: 1,
+      durationMs: 4000,
+    },
+    frames: [{ i: 0, t: 0, s: 'observed' as const, x: 500, y: 300 }],
+  },
+  entry: {} as never,
+  cacheIdentity: 'settings-test',
+  message: 'available',
+})
+
 const upload = () => {
   fireEvent.change(screen.getByLabelText('Upload tennis video'), {
     target: { files: [new File(['demo'], 'demo.mp4', { type: 'video/mp4' })] },
@@ -176,6 +243,7 @@ const loadMetadata = () => {
 describe('progressive pose and ball review', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    window.localStorage.clear()
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test-video')
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
     vi.mocked(runVideoAnalysis).mockResolvedValue(output)
@@ -188,6 +256,7 @@ describe('progressive pose and ball review', () => {
       blob: new Blob(['webm'], { type: 'video/webm' }),
       mimeType: 'video/webm',
     })
+    vi.mocked(generateShotInsight).mockResolvedValue(readyInsight('Default insight.'))
   })
 
   afterEach(() => vi.restoreAllMocks())
@@ -287,32 +356,7 @@ describe('progressive pose and ball review', () => {
   })
 
   it('uses one live settings object for both the viewer and export', async () => {
-    vi.mocked(loadPrecomputedBallTrack).mockResolvedValueOnce({
-      status: 'available',
-      track: {
-        schemaVersion: 'precomputed-ball-track.v1',
-        sourceSha256: 'a'.repeat(64),
-        coordinateSpace: {
-          kind: 'intrinsic-source-pixels',
-          origin: 'top-left',
-          xDirection: 'right',
-          yDirection: 'down',
-          width: 1280,
-          height: 720,
-        },
-        timeline: {
-          frameIndexOrigin: 0,
-          timestampRule: 'frameIndex * 1000 / sourceFps',
-          fps: 2,
-          frameCount: 1,
-          durationMs: 4000,
-        },
-        frames: [{ i: 0, t: 0, s: 'observed', x: 500, y: 300 }],
-      },
-      entry: {} as never,
-      cacheIdentity: 'settings-test',
-      message: 'available',
-    })
+    vi.mocked(loadPrecomputedBallTrack).mockResolvedValueOnce(availableBallTrack())
     render(<App />)
     upload()
     loadMetadata()
@@ -337,5 +381,64 @@ describe('progressive pose and ball review', () => {
       .toBe(viewerProbe.settings)
     expect(screen.queryByText('Coaching labels')).not.toBeInTheDocument()
     expect(screen.queryByText(/Playback is ahead of analyzed evidence/i)).not.toBeInTheDocument()
+  })
+
+  it('loads, edits, validates, and resets the locally stored coaching prompt', async () => {
+    render(<App />)
+    upload()
+    fireEvent.click(screen.getByRole('button', { name: 'Analysis settings' }))
+
+    const prompt = screen.getByLabelText('Coaching analysis prompt')
+    expect(prompt).toHaveValue(DEFAULT_COACHING_ANALYSIS_PROMPT)
+
+    fireEvent.change(prompt, { target: { value: '  Prefer concise recovery drills.  ' } })
+    await waitFor(() => expect(window.localStorage.getItem(COACHING_PROMPT_STORAGE_KEY))
+      .toBe('Prefer concise recovery drills.'))
+
+    fireEvent.change(prompt, { target: { value: 'unsafe\u0000prompt' } })
+    expect(screen.getByRole('alert')).toHaveTextContent(/control characters/i)
+    expect(screen.getByRole('button', { name: 'Rerun coaching analysis' })).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reset prompt' }))
+    expect(prompt).toHaveValue(DEFAULT_COACHING_ANALYSIS_PROMPT)
+    await waitFor(() => expect(window.localStorage.getItem(COACHING_PROMPT_STORAGE_KEY)).toBeNull())
+  })
+
+  it('reruns only coaching with prompt-scoped identity and rejects stale insight results', async () => {
+    vi.mocked(runVideoAnalysis).mockResolvedValueOnce(outputWithShot)
+    vi.mocked(loadPrecomputedBallTrack).mockResolvedValueOnce(availableBallTrack())
+    let resolveStale: ((value: ShotInsight) => void) | undefined
+    vi.mocked(generateShotInsight)
+      .mockImplementationOnce((_videoUrl, _segment, _signal, prompt) => {
+        expect(prompt).toBe(DEFAULT_COACHING_ANALYSIS_PROMPT)
+        return new Promise((resolve) => { resolveStale = resolve })
+      })
+      .mockResolvedValueOnce(readyInsight('Custom prompt insight.'))
+
+    render(<App />)
+    upload()
+    loadMetadata()
+    await waitFor(() => expect(generateShotInsight).toHaveBeenCalledOnce())
+    const staleSignal = vi.mocked(generateShotInsight).mock.calls[0][2]
+
+    fireEvent.click(screen.getByRole('button', { name: 'Analysis settings' }))
+    fireEvent.change(screen.getByLabelText('Coaching analysis prompt'), {
+      target: { value: 'Prefer one concise recovery cue and a shadow drill.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Rerun coaching analysis' }))
+
+    await waitFor(() => expect(generateShotInsight).toHaveBeenCalledTimes(2))
+    expect(staleSignal.aborted).toBe(true)
+    expect(vi.mocked(generateShotInsight).mock.calls[1][3])
+      .toBe('Prefer one concise recovery cue and a shadow drill.')
+    expect(runVideoAnalysis).toHaveBeenCalledOnce()
+    expect(loadPrecomputedBallTrack).toHaveBeenCalledOnce()
+
+    await act(async () => {
+      resolveStale?.(readyInsight('Stale default insight.'))
+    })
+    fireEvent.click(screen.getByText('Shot 1').closest('button')!)
+    expect(await screen.findByText('Custom prompt insight.')).toBeInTheDocument()
+    expect(screen.queryByText('Stale default insight.')).not.toBeInTheDocument()
   })
 })

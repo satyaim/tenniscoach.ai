@@ -41,6 +41,12 @@ movement observations linked to visible pose evidence.
   ball marker scale, ball trail width and point count, body line width, and body
   joint size. Defaults preserve the thin cyan pose and compact green observed
   ball style. The same settings object drives onscreen and WebM rendering.
+- **Editable coaching preference:** the same settings panel exposes the current
+  coaching instruction in a multiline field. `Rerun coaching analysis` reuses
+  existing pose, ball, and shot-segmentation evidence; it does not rerun
+  MediaPipe or BallTrack. Reset restores the repository default. The preference
+  is locally persisted under a versioned browser key and is included only as a
+  clearly delimited, untrusted section of the server-owned evidence prompt.
 - **Optional private/local ball provider:** unknown videos can be sent only to
   an explicitly configured same-origin or loopback endpoint. The public build
   has no endpoint and fails closed as unavailable. The unresolved RacketVision
@@ -71,6 +77,9 @@ movement observations linked to visible pose evidence.
   Grounded visual facts remain distinct from one conservative coaching focus,
   actionable cue, and drill with repetitions and a visible success check.
   Evidence timestamps seek and pause the replay for direct visual inspection.
+  The editable preference cannot remove the server-owned JSON schema, exact
+  timestamps, evidence/abstention rules, safety constraints, or forbidden
+  claims. Insight cache identity includes the prompt version and hash.
 
 For the local hack demo, copy `.env.example` to `.env.local` and set
 `AZURE_OPENAI_API_KEY`. Vite reads this value only in its Node middleware; do
@@ -192,6 +201,11 @@ is shown as unavailable instead of being converted into a prepared result.
   SHA-256; the exact MediaPipe WASM runtime is currently loaded from jsDelivr.
 - Validated derived pose JSON may be stored in this browser until the user
   clears the local analysis cache from settings.
+- The coaching preference is stored only in browser `localStorage` under a
+  versioned key. It has no backend persistence or telemetry. Reset removes the
+  stored value. When coaching is requested, the text accompanies the derived
+  six-frame contact sheet to the same-origin insight API; it never affects pose,
+  ball tracking, deterministic overlays, or WebM export.
 - Verified ball-track JSON may be retained in a separate in-memory cache whose
   revision includes the manifest, provider, config, and track digest; it does
   not invalidate or replace pose cache entries.

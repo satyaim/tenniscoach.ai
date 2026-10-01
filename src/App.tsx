@@ -20,6 +20,15 @@ import {
   type OverlayToggles,
 } from './analysis/compositeRenderer'
 import {
+  coachingPromptError,
+  DEFAULT_COACHING_ANALYSIS_PROMPT,
+  loadStoredCoachingPrompt,
+  MAX_COACHING_PROMPT_LENGTH,
+  persistCoachingPrompt,
+  shotInsightCacheKey,
+  validateCoachingPrompt,
+} from './analysis/coachingPrompt'
+import {
   clearPrecomputedBallTrackCache,
   loadPrecomputedBallTrack,
   type PrecomputedBallTrack,
@@ -46,6 +55,14 @@ import { ShotList } from './components/ShotSegments'
 
 const MAX_FILE_BYTES = 200 * 1024 * 1024
 const MAX_DURATION_SECONDS = 30
+
+const initialCoachingPrompt = () => {
+  try {
+    return loadStoredCoachingPrompt(window.localStorage)
+  } catch {
+    return DEFAULT_COACHING_ANALYSIS_PROMPT
+  }
+}
 
 interface SourceMetadata {
   width: number
@@ -102,6 +119,7 @@ export default function App() {
   const sourceControllerRef = useRef<AbortController | undefined>(undefined)
   const sourceHashPromiseRef = useRef<Promise<string> | undefined>(undefined)
   const insightCacheRef = useRef(new Map<string, ShotInsight>())
+  const insightRevisionRef = useRef(0)
   const objectUrlRef = useRef<string | undefined>(undefined)
   const startedRunRef = useRef<number | undefined>(undefined)
   const runIdRef = useRef(0)
@@ -119,6 +137,9 @@ export default function App() {
   const [renderSettings, setRenderSettings] = useState<CompositeRenderSettings>(
     DEFAULT_COMPOSITE_RENDER_SETTINGS,
   )
+  const [coachingPrompt, setCoachingPrompt] = useState(initialCoachingPrompt)
+  const [appliedCoachingPrompt, setAppliedCoachingPrompt] = useState(initialCoachingPrompt)
+  const [insightRevision, setInsightRevision] = useState(0)
   const [stages, dispatch] = useReducer(stageReducer, initialStages)
   const [selectedInsightSegmentId, setSelectedInsightSegmentId] = useState<string>()
   const [shotInsightStates, setShotInsightStates] = useState<Record<string, {
@@ -128,6 +149,7 @@ export default function App() {
   }>>({})
   const [exportProgress, setExportProgress] = useState<number>()
   const [exportError, setExportError] = useState<string>()
+  const promptError = coachingPromptError(coachingPrompt)
 
   const stopWork = (revokeUrl: boolean) => {
     poseControllerRef.current?.abort()
@@ -152,6 +174,15 @@ export default function App() {
   }
 
   useEffect(() => () => stopWork(true), [])
+
+  useEffect(() => {
+    if (promptError) return
+    try {
+      persistCoachingPrompt(window.localStorage, coachingPrompt)
+    } catch {
+      // Local prompt persistence is optional and must not block analysis.
+    }
+  }, [coachingPrompt, promptError])
 
   const runPoseStage = async (
     runId: number,
@@ -386,6 +417,7 @@ export default function App() {
       return
     }
     const runId = runIdRef.current
+    if (!promptError) setAppliedCoachingPrompt(validateCoachingPrompt(coachingPrompt))
     const url = URL.createObjectURL(file)
     objectUrlRef.current = url
     setSelectedFile(file)
@@ -447,15 +479,26 @@ export default function App() {
     insightControllerRef.current?.abort()
     const controller = new AbortController()
     insightControllerRef.current = controller
+    const insightRunId = runIdRef.current
+    const revision = insightRevision
     setShotInsightStates(Object.fromEntries(
       shotSegments.map((segment) => [segment.id, { status: 'queued' as const }]),
     ))
     void (async () => {
       for (const segment of shotSegments) {
         if (controller.signal.aborted) return
-        const cacheKey = `${poseOutput.sourceHash}:${segment.id}:${segment.onsetMs}:${segment.offsetMs}`
+        const cacheKey = shotInsightCacheKey(
+          poseOutput.sourceHash,
+          segment,
+          appliedCoachingPrompt,
+        )
         const cached = insightCacheRef.current.get(cacheKey)
         if (cached) {
+          if (
+            controller.signal.aborted
+            || insightRunId !== runIdRef.current
+            || revision !== insightRevisionRef.current
+          ) return
           setShotInsightStates((states) => ({
             ...states,
             [segment.id]: { status: 'ready', insight: cached },
@@ -464,14 +507,28 @@ export default function App() {
         }
         setShotInsightStates((states) => ({ ...states, [segment.id]: { status: 'loading' } }))
         try {
-          const insight = await generateShotInsight(videoUrl, segment, controller.signal)
+          const insight = await generateShotInsight(
+            videoUrl,
+            segment,
+            controller.signal,
+            appliedCoachingPrompt,
+          )
+          if (
+            controller.signal.aborted
+            || insightRunId !== runIdRef.current
+            || revision !== insightRevisionRef.current
+          ) return
           insightCacheRef.current.set(cacheKey, insight)
           setShotInsightStates((states) => ({
             ...states,
             [segment.id]: { status: 'ready', insight },
           }))
         } catch (error) {
-          if (!controller.signal.aborted) {
+          if (
+            !controller.signal.aborted
+            && insightRunId === runIdRef.current
+            && revision === insightRevisionRef.current
+          ) {
             setShotInsightStates((states) => ({
               ...states,
               [segment.id]: { status: 'error', message: errorMessage(error) },
@@ -481,7 +538,24 @@ export default function App() {
       }
     })()
     return () => controller.abort()
-  }, [poseOutput, shotSegments, videoUrl])
+  }, [appliedCoachingPrompt, insightRevision, poseOutput, shotSegments, videoUrl])
+
+  const rerunCoachingAnalysis = () => {
+    if (promptError || !poseOutput || !shotSegments.length) return
+    const prompt = validateCoachingPrompt(coachingPrompt)
+    insightControllerRef.current?.abort()
+    insightRetryControllerRef.current?.abort()
+    for (const segment of shotSegments) {
+      insightCacheRef.current.delete(shotInsightCacheKey(poseOutput.sourceHash, segment, prompt))
+    }
+    const revision = insightRevisionRef.current + 1
+    insightRevisionRef.current = revision
+    setAppliedCoachingPrompt(prompt)
+    setInsightRevision(revision)
+    setShotInsightStates(Object.fromEntries(
+      shotSegments.map((segment) => [segment.id, { status: 'queued' as const }]),
+    ))
+  }
 
   const seekToTimestamp = (timestampMs: number, pause = false) => {
     const video = playbackVideoRef.current
@@ -653,6 +727,48 @@ export default function App() {
                 />
               </label>
             ))}
+            <div className="settings-heading settings-section-heading">
+              <strong>Coaching analysis</strong>
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => setCoachingPrompt(DEFAULT_COACHING_ANALYSIS_PROMPT)}
+              >
+                Reset prompt
+              </button>
+            </div>
+            <label className="settings-prompt">
+              <span>Coaching analysis prompt</span>
+              <textarea
+                value={coachingPrompt}
+                maxLength={MAX_COACHING_PROMPT_LENGTH}
+                rows={8}
+                aria-invalid={Boolean(promptError)}
+                aria-describedby={[
+                  'coaching-prompt-help',
+                  promptError ? 'coaching-prompt-error' : undefined,
+                ].filter(Boolean).join(' ')}
+                onChange={(event) => setCoachingPrompt(event.target.value)}
+              />
+            </label>
+            <small id="coaching-prompt-help">
+              Saved only in this browser. Your preferences can guide the coaching narrative,
+              but cannot replace evidence, timestamp, safety, abstention, or JSON rules.
+              Rerunning reuses the current pose, ball, and shot evidence.
+            </small>
+            {promptError && (
+              <small id="coaching-prompt-error" className="settings-error" role="alert">
+                {promptError}
+              </small>
+            )}
+            <button
+              type="button"
+              className="text-button"
+              disabled={Boolean(promptError) || !poseOutput || !shotSegments.length}
+              onClick={rerunCoachingAnalysis}
+            >
+              Rerun coaching analysis
+            </button>
             <button type="button" className="text-button" onClick={() => void clearCache()}>
               Clear local analysis cache
             </button>
@@ -766,17 +882,39 @@ export default function App() {
                   const retryController = new AbortController()
                   insightRetryControllerRef.current = retryController
                   const retryRunId = runIdRef.current
+                  const retryRevision = insightRevisionRef.current
+                  const cacheKey = poseOutput
+                    ? shotInsightCacheKey(
+                        poseOutput.sourceHash,
+                        segment,
+                        appliedCoachingPrompt,
+                      )
+                    : undefined
                   setShotInsightStates((states) => ({ ...states, [segment.id]: { status: 'loading' } }))
-                  void generateShotInsight(videoUrl, segment, retryController.signal)
+                  void generateShotInsight(
+                    videoUrl,
+                    segment,
+                    retryController.signal,
+                    appliedCoachingPrompt,
+                  )
                     .then((insight) => {
-                      if (retryController.signal.aborted || retryRunId !== runIdRef.current) return
+                      if (
+                        retryController.signal.aborted
+                        || retryRunId !== runIdRef.current
+                        || retryRevision !== insightRevisionRef.current
+                      ) return
+                      if (cacheKey) insightCacheRef.current.set(cacheKey, insight)
                       setShotInsightStates((states) => ({
                         ...states,
                         [segment.id]: { status: 'ready', insight },
                       }))
                     })
                     .catch((error) => {
-                      if (retryController.signal.aborted || retryRunId !== runIdRef.current) return
+                      if (
+                        retryController.signal.aborted
+                        || retryRunId !== runIdRef.current
+                        || retryRevision !== insightRevisionRef.current
+                      ) return
                       setShotInsightStates((states) => ({
                         ...states,
                         [segment.id]: { status: 'error', message: errorMessage(error) },

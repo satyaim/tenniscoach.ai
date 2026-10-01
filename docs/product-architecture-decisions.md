@@ -77,8 +77,14 @@ Key files:
 - `src\analysis\localBallProvider.ts` — feature-gated loopback NDJSON adapter,
   progressive observation validation, and `BallTrackingResult` source/run
   validation. It contains no model or checkpoint.
-- `src\analysis\compositeRenderer.ts` — pure shared pose, observed-ball trail,
-  and coaching drawing used by both the viewer and export.
+- `src\analysis\compositeRenderer.ts` — pure shared pose and observed-ball
+  trail drawing used by both the viewer and export.
+- `src\analysis\coachingPrompt.ts` — validated default/user coaching
+  preference, versioned local persistence, prompt hashing, and shot-insight
+  cache identity.
+- `shotInsightPrompt.ts` — server-owned composition of exact timestamps, JSON
+  schema, evidence/safety/abstention constraints, and the delimited untrusted
+  user coaching-preference section.
 - `src\analysis\videoExport.ts` — source-dimension WebM recording, source audio
   composition, progress, cancellation, and stream/audio cleanup.
 - `src\components\PoseViewer.tsx` — persistent ordinary source player plus the
@@ -160,7 +166,7 @@ The temporary rules are limited to orchestration, evidence eligibility, safety, 
 
 ## Privacy and safety
 
-Video stays local by default. The exact MediaPipe WASM runtime is fetched from its pinned jsDelivr URL on first use; the model is fetched from a versioned same-origin path and SHA-256 verified before initialization. "Local video processing" therefore does not mean fully offline runtime delivery. The app also fetches a small same-origin precomputed-ball manifest and, only for an exact known source hash, a declared JSON track whose bytes and SHA-256 are verified before use. Neither request contains video bytes. If the operator explicitly configures a same-origin or loopback ball endpoint, the selected source is posted to that private endpoint for inference. Raw decoded frames are not persisted by the browser app. Derived source metadata, pose landmarks, and movement chapters may persist in browser IndexedDB under content-addressed keys that include the verified model digest; verified ball JSON uses a separate revisioned in-memory cache. The settings panel exposes a clear action. Object URLs are never cached. No telemetry, automatic video export, adopted public ball model, contact detector, tactical inference, or medical/correctness claim exists. Guidance is general 2D movement observation.
+Video stays local by default. The exact MediaPipe WASM runtime is fetched from its pinned jsDelivr URL on first use; the model is fetched from a versioned same-origin path and SHA-256 verified before initialization. "Local video processing" therefore does not mean fully offline runtime delivery. The app also fetches a small same-origin precomputed-ball manifest and, only for an exact known source hash, a declared JSON track whose bytes and SHA-256 are verified before use. Neither request contains video bytes. If the operator explicitly configures a same-origin or loopback ball endpoint, the selected source is posted to that private endpoint for inference. Raw decoded frames are not persisted by the browser app. Derived source metadata, pose landmarks, and movement chapters may persist in browser IndexedDB under content-addressed keys that include the verified model digest; verified ball JSON uses a separate revisioned in-memory cache. The coaching preference is stored only in versioned browser localStorage, has no backend persistence or telemetry, and is sent only with the derived contact sheet when the user requests coaching. Reset removes it. It never changes deterministic overlays or export. The settings panel exposes a clear action. Object URLs are never cached. No telemetry, automatic video export, adopted public ball model, contact detector, tactical inference, or medical/correctness claim exists. Guidance is general 2D movement observation.
 
 ## Pose overlay rendering decision
 
@@ -180,9 +186,10 @@ browser video element seeks to six evenly spaced timestamps inside the selected
 onset-to-offset window and creates one labeled 3×2 JPEG contact sheet. Only that
 derived image is sent to `/api/shot-insight`; source video bytes are not sent.
 After pose and ball processing finish, insights are generated sequentially in
-timeline order. Each completed result is held in an in-memory, source-and-range
-addressed cache; selecting a range reveals its queued, loading, error, or ready
-state without starting a duplicate request.
+timeline order. Each completed result is held in an in-memory cache addressed
+by source, range, prompt contract version, and normalized prompt hash;
+selecting a range reveals its queued, loading, error, or ready state without
+starting a duplicate request.
 The development server acquires an Azure access token from the authenticated
 CLI and calls the existing vision deployment. It rejects malformed timestamps,
 unlisted evidence references, and prohibited coaching claims before returning
@@ -191,6 +198,18 @@ The coaching prompt must translate one grounded visual pattern into a specific
 adjustment or progression, a concise practice cue, and a drill with volume and
 a visible success check. It may explain cautious general tennis principles but
 cannot infer contact, ball outcome, stroke identity, or tactics.
+
+The settings panel exposes only the coaching-preference portion of that prompt.
+The exact timestamps, output schema, evidence contract, prohibited claims,
+safety language, and abstention behavior remain application-owned on the
+same-origin server. The preference is validated as trimmed text with a
+4000-character maximum and no binary/control content, then placed inside an
+explicit `<user_coaching_preferences>` delimiter whose instructions cannot
+override the protected contract. Rerun aborts stale insight requests, advances
+an insight-only revision, invalidates only matching prompt-scoped insight cache
+entries, and regenerates all current shot insights from the already available
+pose, ball, and segmentation evidence. It never restarts those deterministic
+stages.
 
 For an exact verified known source, a separate canvas selects the canonical
 BallTrack frame by source timeline and renders only `observed` coordinates.

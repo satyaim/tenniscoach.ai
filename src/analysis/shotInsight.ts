@@ -205,14 +205,24 @@ export const generateShotInsight = async (
   videoUrl: string,
   segment: StrokeSegment,
   signal: AbortSignal,
+  coachingPrompt: string,
 ) => {
   const contactSheet = await buildShotContactSheet(videoUrl, segment, signal)
+  return requestShotInsight(contactSheet, signal, coachingPrompt)
+}
+
+export const requestShotInsight = async (
+  contactSheet: Awaited<ReturnType<typeof buildShotContactSheet>>,
+  signal: AbortSignal,
+  coachingPrompt: string,
+) => {
   const response = await fetch('/api/shot-insight', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       imageDataUrl: contactSheet.imageDataUrl,
       timestamps: contactSheet.timestamps,
+      coachingPrompt,
     }),
     signal,
   })

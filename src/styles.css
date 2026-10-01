@@ -81,7 +81,9 @@ input:focus-visible + * {
   display: grid;
   gap: 14px;
   width: min(380px, calc(100vw - 40px));
+  max-height: min(760px, calc(100vh - 76px));
   padding: 18px;
+  overflow-y: auto;
   text-align: left;
   background: rgba(7, 17, 14, 0.98);
   border: 1px solid rgba(181, 255, 208, 0.28);
@@ -116,6 +118,43 @@ input:focus-visible + * {
 .settings-slider input {
   width: 100%;
   accent-color: #78e9a3;
+}
+
+.settings-section-heading {
+  padding-top: 12px;
+  border-top: 1px solid rgba(181, 255, 208, 0.16);
+}
+
+.settings-prompt {
+  display: grid;
+  gap: 7px;
+  color: #dce9e2;
+  font-size: 0.8rem;
+}
+
+.settings-prompt textarea {
+  width: 100%;
+  min-height: 150px;
+  padding: 10px;
+  color: #eef8f1;
+  resize: vertical;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(181, 255, 208, 0.24);
+  border-radius: 10px;
+}
+
+.settings-prompt textarea:focus {
+  border-color: #78e9a3;
+  outline: 2px solid rgba(120, 233, 163, 0.2);
+}
+
+.settings-panel .settings-error {
+  color: #ffaea8;
+}
+
+.settings-panel button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
 }
 
 .settings-panel p,

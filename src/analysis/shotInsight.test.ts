@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest'
-import { parseShotInsight } from './shotInsight'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { parseShotInsight, requestShotInsight } from './shotInsight'
 
 describe('shot insight response parsing', () => {
+  afterEach(() => vi.restoreAllMocks())
+
   it('accepts grounded facts and an optional safe cue', () => {
     expect(parseShotInsight({
       visualFacts: [{
@@ -33,5 +35,29 @@ describe('shot insight response parsing', () => {
       coachRecommendation: null,
       withheld: [],
     })).toThrow(/invalid visual fact/i)
+  })
+
+  it('sends the custom coaching prompt to the same-origin API payload', async () => {
+    const payload = {
+      visualFacts: [],
+      coachRecommendation: null,
+      withheld: [],
+    }
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+
+    await requestShotInsight({
+      imageDataUrl: 'data:image/jpeg;base64,AA==',
+      timestamps: ['1.00s', '1.20s', '1.40s', '1.60s', '1.80s', '2.00s'],
+    }, new AbortController().signal, 'Prefer a concise recovery drill.')
+
+    const request = fetchMock.mock.calls[0][1]
+    expect(JSON.parse(String(request?.body))).toMatchObject({
+      coachingPrompt: 'Prefer a concise recovery drill.',
+    })
   })
 })
