@@ -1,5 +1,7 @@
 import { act, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { ballTrailTrackIdentity } from '../analysis/ballOverlayModel'
+import type { PrecomputedBallTrack } from '../analysis/precomputedBallTrack'
 import { PoseViewer } from './PoseViewer'
 
 describe('PoseViewer', () => {
@@ -61,5 +63,41 @@ describe('PoseViewer', () => {
       aspectRatio: '0.5625',
       width: 'min(100%, 38.25vh, 427.5px)',
     })
+  })
+
+  it('keeps one trail identity across progressive and final versions of the same track', () => {
+    const partial: PrecomputedBallTrack = {
+      schemaVersion: 'precomputed-ball-track.v1',
+      sourceSha256: 'a'.repeat(64),
+      coordinateSpace: {
+        kind: 'intrinsic-source-pixels',
+        origin: 'top-left',
+        xDirection: 'right',
+        yDirection: 'down',
+        width: 1280,
+        height: 720,
+      },
+      timeline: {
+        frameIndexOrigin: 0,
+        timestampRule: 'frameIndex * 1000 / sourceFps',
+        fps: 30,
+        frameCount: 2,
+        durationMs: 66.67,
+      },
+      frames: [
+        { i: 0, t: 0, s: 'observed', x: 10, y: 20 },
+        { i: 1, t: 33.33, s: 'observed', x: 12, y: 21 },
+      ],
+    }
+    const final = {
+      ...partial,
+      timeline: { ...partial.timeline, frameCount: 3, durationMs: 100 },
+      frames: [
+        ...partial.frames,
+        { i: 2, t: 66.67, s: 'observed' as const, x: 14, y: 22 },
+      ],
+    }
+
+    expect(ballTrailTrackIdentity(final)).toBe(ballTrailTrackIdentity(partial))
   })
 })

@@ -10,21 +10,28 @@ The resolved MVP is therefore a **video evidence reviewer**, not an automated ce
 
 1. Upload one local MP4, MOV, or WebM clip up to 30 seconds and 200 MB.
 2. Create a temporary object URL immediately so the real source video remains visible and playable independently of analysis.
-3. Hash the source locally, reuse an exact compatible derived pose artifact when available, or load MediaPipe Pose Landmarker Lite and sample the decoded video at up to 6 Hz with a 180-frame cap. The analyzer permits conservative image-plane observations at 6 Hz but withholds speed magnitude below 30 Hz.
-4. Automatically choose one primary player using persistence, visible-body coverage, image area, and court depth. Secondary or stray pose detections remain internal tracking candidates and are never offered as an analysis choice.
-5. Run the experimental movement segmenter and descriptive pose analyzer. Automatic stroke identity is disabled in this upload flow; low-rate, provisional, or weak evidence abstains.
-6. Review the source video with a timestamp-synchronized pose overlay and evidence-linked observation cards. Any analysis failure leaves normal source playback available.
-7. Independently resolve the full source SHA-256 against
+3. Start independent pose and ball jobs as soon as source metadata is available.
+   The visible player is never used for inference seeking. Pose uses a hidden
+   decoder; ball first resolves the exact source hash against the precomputed
+   manifest and may then use an explicitly configured private loopback provider.
+4. Reuse an exact compatible derived pose artifact when available, or load MediaPipe Pose Landmarker Lite and sample the hidden decoded video at up to 6 Hz with a 180-frame cap. Publish each pose batch to the viewer while extraction continues. The analyzer permits conservative image-plane observations at 6 Hz but withholds speed magnitude below 30 Hz.
+5. Automatically choose one primary player using persistence, visible-body coverage, image area, and court depth. Secondary or stray pose detections remain internal tracking candidates and are never offered as an analysis choice.
+6. Run the experimental movement segmenter and descriptive pose analyzer as pose finalization. Automatic stroke identity is disabled in this upload flow; low-rate, provisional, or weak evidence abstains.
+7. Review the source video while either stage continues. Any pose or ball failure/cancellation leaves normal source playback and the other stage available.
+8. Independently resolve the full source SHA-256 against
    `precomputed-ball-tracks.v1`. Exact known bytes may receive a verified
    observed-only ball overlay; unknown, unavailable, mismatched, or invalid
-   entries remain pose-only.
+   entries remain pose-only unless the private local provider is configured.
+9. Export enabled ready overlays explicitly to WebM from a separate hidden
+   source video. The composite renderer is shared with the onscreen viewer and
+   original audio is attached when Chrome/Edge exposes an audio track.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
   A[Camera / upload / optional local demo] --> B[HTML video]
-  B --> C[Isolated MediaPipe pose session]
+  B --> C[Hidden MediaPipe pose decoder]
   B --> L[SHA-256 source identity]
   C --> D[Timestamped player tracks]
   D --> E[Experimental causal segmenter]
@@ -40,7 +47,12 @@ flowchart LR
   F --> M
   L --> N[Versioned same-origin ball manifest]
   N --> O[SHA-256 verified precomputed track]
+  N --> P[Optional private loopback provider]
+  P --> O
   O --> I
+  I --> Q[Shared composite renderer]
+  Q --> R[Visible overlay]
+  Q --> S[Hidden source + audio WebM export]
 ```
 
 Key files:
@@ -51,7 +63,7 @@ Key files:
 - `src\analysis\strokeSegmenter.ts` — temporary causal change-point baseline. It never scans future samples while an event is active. Finalization requires pre/post context, valid samples around the peak, pose/scale evidence, duration bounds, and effective sampling. Failed finalization produces provisional ranges instead of blocking playback.
 - `src\analysis\heuristicAnalyzer.ts` — image-plane observations and explicit abstention. Provisional ranges return no descriptors or coaching.
 - `src\analysis\types.ts` — replaceable analyzer boundary and revisioned `VideoAnalysisRun`.
-- `src\analysis\providerRegistry.ts` — metadata-only stage-provider catalog and fail-closed product eligibility gate; production has no executable ball binding.
+- `src\analysis\providerRegistry.ts` — metadata-only stage-provider catalog and fail-closed product eligibility gate; the public build has no adopted executable model binding.
 - `src\analysis\analysisCache.ts` — recursive canonical hashing, immutable stage envelopes, memory-fronted IndexedDB persistence, semantic read validation, corruption eviction, atomic publication, and clear-cache support.
 - `src\analysis\precomputedBallTrack.ts` — strict
   `precomputed-ball-tracks.v1` / `precomputed-ball-track.v1` parsing, stable
@@ -60,9 +72,23 @@ Key files:
   abort handling, and independently revisioned in-memory reuse.
 - `src\analysis\ballOverlayModel.ts` — nearest bounded source-frame selection,
   visualization-only marker radius, and raw observed-only trail/reset rules.
-- `src\components\BallOverlay.tsx` — DPR-aware intrinsic-source-pixel rendering
-  using the same contain geometry and presented-frame clock as `PoseViewer`.
-- `src\components\AnnotatedReplay.tsx` — full-source replay, skeleton/labels, unified chapter lane, key markers, navigation hooks, manual marker actions, and WebM export.
+- `src\analysis\stageCoordinator.ts` — typed independent stage state and
+  run-identity reducer that ignores stale callbacks.
+- `src\analysis\localBallProvider.ts` — feature-gated loopback NDJSON adapter,
+  progressive observation validation, and `BallTrackingResult` source/run
+  validation. It contains no model or checkpoint.
+- `src\analysis\compositeRenderer.ts` — pure shared pose and observed-ball
+  trail drawing used by both the viewer and export.
+- `src\analysis\coachingPrompt.ts` — validated default/user coaching
+  preference, versioned local persistence, prompt hashing, and shot-insight
+  cache identity.
+- `shotInsightPrompt.ts` — server-owned composition of exact timestamps, JSON
+  schema, evidence/safety/abstention constraints, and the delimited untrusted
+  user coaching-preference section.
+- `src\analysis\videoExport.ts` — source-dimension WebM recording, source audio
+  composition, progress, cancellation, and stream/audio cleanup.
+- `src\components\PoseViewer.tsx` — persistent ordinary source player plus the
+  shared composite overlay and analyzed-horizon notice.
 
 ## Measurement contract
 
@@ -87,7 +113,7 @@ Diagnostics record actual timestamps, median interval, interval IQR, maximum gap
 | A provisional review path survives strict gates | When no chapter finalizes, segmentation uncertainty must not remove source playback or useful estimates. | Extend the validated temporal model to preserve mixed final/provisional candidates. |
 | Rule segmenter is Experimental | It is a transparent temporary baseline, not learned AI segmentation. | Retire after a licensed temporal model wins held-out boundary/class accuracy, latency, size, and browser fallback gates. |
 | Two-player one-time confirmation | Track recommendation is useful but not physical identity proof. | Validated identity/target selection exists. |
-| Explicit WebM export only | Keeps video local and avoids FFmpeg/backend requirements. | Reliable local MP4/audio support is measured and requested. |
+| Explicit combined WebM export only | Uses the shared renderer, a separate hidden video, source dimensions, and original audio when exposed by Chrome/Edge media capture or Web Audio. No MP4 claim is made. | Reliable local MP4 support is measured and requested. |
 | Replaceable precomputed-ball evidence provider | A full upload SHA-256 may select only a versioned same-origin artifact whose source bytes/timeline/geometry and artifact digest validate. Ball provider/cache identity stays separate from pose. This permits a bounded known-video demo without enabling executable or filename-selected inference. | A reviewed live provider and artifact pass rights, benchmark, researcher, PM, QA, and CEO gates. |
 | Content-addressed stage cache | Exact source bytes plus stage/provider/model/checkpoint/config/contract/decoder identity and direct dependency artifact hashes allow selective reuse without filename assumptions. Pose, chapters, ball observations, trajectory, court, and stroke stages remain independently invalidatable. | Storage pressure or cross-device workflows require a user-approved alternative. |
 | Derived artifacts only | Source metadata, pose landmarks, and chapters may persist locally; raw decoded RGB frames, `VideoFrame`, `ImageBitmap`, and object URLs remain ephemeral. | A measured model requires raw-frame persistence and the user explicitly accepts that privacy/storage change. |
@@ -102,19 +128,28 @@ Writes are published only after complete payload validation and hashing. Indexed
 
 ## Progressive architecture decision
 
-The accepted next architecture is mode-independent and revisioned: `FrameSource -> ModeScheduler -> FeatureExtractor adapter -> TemporalSegmenter -> IncrementalEventStore -> timeline`. `requestVideoFrameCallback()` is the preferred media clock; inference must not execute inside the callback. Live uses a latest-frame-only bounded queue and separate graph; Post uses ordered bounded work, cancellation, and no silent dropping. WebCodecs and ONNX Runtime Web remain optional adapters, not critical-path dependencies, until they demonstrate a measured benefit and pass model/operator/license/browser review.
+The active upload architecture is revisioned and independent:
+`source metadata -> {pose job, ball job} -> partial evidence -> shared renderer`.
+Each stage owns its abort controller and typed state; callbacks carry a run
+identity and stale runs are ignored. A stage failure or cancellation cannot
+change the other stage or source playback.
 
-The current implementation publishes updated chapter estimates every 12 pose samples and can expose a clean single-player finalized chapter before the complete extraction pass ends. The final pass reconciles all chapters and isolates chapter-level failures. It still uses repeated HTML-video seeks and synchronous MediaPipe calls rather than a worker-backed bounded scheduler, so this is a genuine but partial progressive implementation. Browser-local background processing continues only while the page remains open; tab close or OS suspension can stop it. Durable jobs require a native service or opt-in backend and remain pilot scope.
+The implementation publishes pose frames every 12 samples. Final tracking,
+segmentation, and coaching run after extraction. The optional local ball
+provider may stream validated observations incrementally. Both appear as soon
+as evidence exists. Pose still uses repeated seeks and synchronous MediaPipe
+calls on its hidden decoder rather than a worker-backed scheduler. Browser work
+continues only while the page remains open.
 
 ## Capability program
 
 Capabilities advance sequentially: Phase 0 POC stability, Phase 1 ball tracking, Phase 2 court calibration/player position, then Phase 3 validated stroke classification and chapters. Runtime input remains ordinary monocular RGB video; CSV annotations, sensors, radar, and special cameras are never required. Each capability requires independent model/license research, a developer spike, cross-functional measured evaluation, and defect repair before the next phase.
 
-`src\analysis\ballTracking.ts` defines the reviewed Phase 1 boundary without selecting a model: versioned `BallObservation`, `BallTrack`, metrics, model/license manifest, progress callback, cancellation signal, and an explicit unavailable result. A future browser or local Python/GPU adapter must accept the ordinary video and return this schema. No ball tracker is active in the current product.
+`src\analysis\ballTracking.ts` defines the reviewed Phase 1 boundary without selecting a model: versioned `BallObservation`, `BallTrack`, metrics, model/license manifest, progress callback, cancellation signal, and an explicit unavailable result. A private local Python/GPU endpoint may accept the ordinary video and return this schema when the operator explicitly configures it. No ball model is bundled or active in the public/default product.
 
 ### Phase 1A model-selection decision
 
-Independent research concluded **NO ADOPTION**. No reviewed candidate currently combines ordinary monocular RGB inference, runnable tennis weights, complete code/checkpoint/framework/data/source-media rights, held-out rear-view validation, deployment feasibility, and calibrated abstention. Ball tracking therefore remains dark and the adapter is not connected to the UI.
+Independent research concluded **NO ADOPTION**. No reviewed candidate currently combines ordinary monocular RGB inference, runnable tennis weights, complete code/checkpoint/framework/data/source-media rights, held-out rear-view validation, deployment feasibility, and calibrated abstention. The public build therefore remains dark. The UI can consume a separately operated private loopback provider, but that feature gate is not adoption, redistribution, or approval of any checkpoint.
 
 After unconditional Phase 0 sign-off, the only authorized next step is a controlled local/offline Python feasibility bake-off. RacketVision BallTrack is the primary conditional research candidate and WASB tennis is the independent legacy baseline; a rights-clean generic detector may be used only as a negative control. RacketVision checkpoint licensing and source-media rights remain unresolved, while WASB weight and original-footage rights remain unresolved. TrackNetV4 remains watchlist-only because official weight links are not runnable. No checkpoint may be redistributed or become a product dependency until rights and local held-out measurements are resolved.
 
@@ -131,7 +166,7 @@ The temporary rules are limited to orchestration, evidence eligibility, safety, 
 
 ## Privacy and safety
 
-Video stays local. The exact MediaPipe WASM runtime is fetched from its pinned jsDelivr URL on first use; the model is fetched from a versioned same-origin path and SHA-256 verified before initialization. "Local video processing" therefore does not mean fully offline runtime delivery. The app also fetches a small same-origin precomputed-ball manifest and, only for an exact known source hash, a declared JSON track whose bytes and SHA-256 are verified before use. Neither request contains video bytes. Raw decoded frames are not persisted. Derived source metadata, pose landmarks, and movement chapters may persist in browser IndexedDB under content-addressed keys that include the verified model digest; verified ball JSON uses a separate revisioned in-memory cache. The settings panel exposes a clear action. Object URLs are never cached. No video upload, telemetry, automatic video export, live ball inference, contact detector, tactical inference, or medical/correctness claim exists. Guidance is general 2D movement observation.
+Video stays local by default. The exact MediaPipe WASM runtime is fetched from its pinned jsDelivr URL on first use; the model is fetched from a versioned same-origin path and SHA-256 verified before initialization. "Local video processing" therefore does not mean fully offline runtime delivery. The app also fetches a small same-origin precomputed-ball manifest and, only for an exact known source hash, a declared JSON track whose bytes and SHA-256 are verified before use. Neither request contains video bytes. If the operator explicitly configures a same-origin or loopback ball endpoint, the selected source is posted to that private endpoint for inference. Raw decoded frames are not persisted by the browser app. Derived source metadata, pose landmarks, and movement chapters may persist in browser IndexedDB under content-addressed keys that include the verified model digest; verified ball JSON uses a separate revisioned in-memory cache. The coaching preference is stored only in versioned browser localStorage, has no backend persistence or telemetry, and is sent only with the derived contact sheet when the user requests coaching. Reset removes it. It never changes deterministic overlays or export. The settings panel exposes a clear action. Object URLs are never cached. No telemetry, automatic video export, adopted public ball model, contact detector, tactical inference, or medical/correctness claim exists. Guidance is general 2D movement observation.
 
 ## Pose overlay rendering decision
 
@@ -151,9 +186,10 @@ browser video element seeks to six evenly spaced timestamps inside the selected
 onset-to-offset window and creates one labeled 3×2 JPEG contact sheet. Only that
 derived image is sent to `/api/shot-insight`; source video bytes are not sent.
 After pose and ball processing finish, insights are generated sequentially in
-timeline order. Each completed result is held in an in-memory, source-and-range
-addressed cache; selecting a range reveals its queued, loading, error, or ready
-state without starting a duplicate request.
+timeline order. Each completed result is held in an in-memory cache addressed
+by source, range, prompt contract version, and normalized prompt hash;
+selecting a range reveals its queued, loading, error, or ready state without
+starting a duplicate request.
 The development server acquires an Azure access token from the authenticated
 CLI and calls the existing vision deployment. It rejects malformed timestamps,
 unlisted evidence references, and prohibited coaching claims before returning
@@ -163,13 +199,36 @@ adjustment or progression, a concise practice cue, and a drill with volume and
 a visible success check. It may explain cautious general tennis principles but
 cannot infer contact, ball outcome, stroke identity, or tactics.
 
+The settings panel exposes only the coaching-preference portion of that prompt.
+The exact timestamps, output schema, evidence contract, prohibited claims,
+safety language, and abstention behavior remain application-owned on the
+same-origin server. The preference is validated as trimmed text with a
+4000-character maximum and no binary/control content, then placed inside an
+explicit `<user_coaching_preferences>` delimiter whose instructions cannot
+override the protected contract. Rerun aborts stale insight requests, advances
+an insight-only revision, invalidates only matching prompt-scoped insight cache
+entries, and regenerates all current shot insights from the already available
+pose, ball, and segmentation evidence. It never restarts those deterministic
+stages.
+
 For an exact verified known source, a separate canvas selects the canonical
 BallTrack frame by source timeline and renders only `observed` coordinates.
 `ambiguous` and `abstained` states contain no coordinate and clear the trail.
 The marker uses emitted component radius plus 1.5 source pixels, clamped to
-3–18 source pixels; when the optional genuine radius is absent, a conservative
-6-source-pixel visualization-only radius is used. The trail contains at most 18
-raw observed points and 650 ms, fades older segments, and resets on any
-non-observed state, seek, replacement, backwards/large timestamp discontinuity,
-or a large-distance safeguard. It performs no smoothing, interpolation, repair,
+3–18 source pixels before the user-selected marker multiplier; when the
+optional genuine radius is absent, a conservative 6-source-pixel
+visualization-only radius is used. The trail defaults to at most 18 raw
+observed points and 650 ms, with a safe user cap of 36 points. It fades older
+segments and resets on any non-observed state, seek, source replacement,
+backwards/large timestamp discontinuity, or a large-distance safeguard.
+Repeated presented frames that resolve to the same observation preserve the
+trail, and compatible partial/final local-provider track replacements preserve
+the trail identity. It performs no smoothing, interpolation, repair,
 prediction, contact detection, or outcome inference.
+
+The review settings popover owns one `CompositeRenderSettings` object for ball
+marker scale, trail width/length, pose line width, and joint size. The visible
+viewer and hidden export receive that same object, so customization cannot
+diverge between playback and downloaded WebM. Coaching remains below the video;
+no evidence-quality or coaching warning banner is rendered over the player or
+burned into export.
