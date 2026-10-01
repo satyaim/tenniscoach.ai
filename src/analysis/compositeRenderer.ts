@@ -7,7 +7,7 @@ import {
 } from './ballOverlayModel'
 import { poseFrameAtTime } from './overlayModel'
 import type { PrecomputedBallTrack } from './precomputedBallTrack'
-import type { AnalysisResult, PoseFrame } from './types'
+import type { PoseFrame } from './types'
 import { containVideoRect } from './videoGeometry'
 
 export const POSE_CONNECTIONS = [
@@ -22,7 +22,22 @@ export const POSE_CONNECTIONS = [
 export interface OverlayToggles {
   body: boolean
   ball: boolean
-  coaching: boolean
+}
+
+export interface CompositeRenderSettings {
+  ballMarkerScale: number
+  ballTrailLineWidth: number
+  ballTrailMaxPoints: number
+  bodyLineWidth: number
+  bodyJointRadius: number
+}
+
+export const DEFAULT_COMPOSITE_RENDER_SETTINGS: CompositeRenderSettings = {
+  ballMarkerScale: 1,
+  ballTrailLineWidth: 1.8,
+  ballTrailMaxPoints: 18,
+  bodyLineWidth: 2.2,
+  bodyJointRadius: 2.6,
 }
 
 export interface CompositeOverlayInput {
@@ -31,8 +46,8 @@ export interface CompositeOverlayInput {
   sourceHeight: number
   poseFrames?: PoseFrame[]
   ballTrack?: PrecomputedBallTrack
-  analysis?: AnalysisResult
   toggles: OverlayToggles
+  settings: CompositeRenderSettings
   playerLabel?: string
 }
 
@@ -55,8 +70,8 @@ const drawPose = (
     x: rect.x + pose[index].x * rect.width,
     y: rect.y + pose[index].y * rect.height,
   })
-  const lineWidth = Math.max(1, 2.2 * rect.scale)
-  const radius = Math.max(1.2, 2.6 * rect.scale)
+  const lineWidth = Math.max(0.6, input.settings.bodyLineWidth * rect.scale)
+  const radius = Math.max(0.8, input.settings.bodyJointRadius * rect.scale)
   context.lineCap = 'round'
   context.lineJoin = 'round'
   context.lineWidth = lineWidth
@@ -93,9 +108,12 @@ const drawBall = (
   track: PrecomputedBallTrack,
   timestampMs: number,
   trail: BallTrailState,
+  settings: CompositeRenderSettings,
 ) => {
   const frame = ballFrameAtTime(track, timestampMs)
-  const nextTrail = updateBallTrail(trail, frame, track)
+  const nextTrail = updateBallTrail(trail, frame, track, {
+    maxPoints: settings.ballTrailMaxPoints,
+  })
   if (!frame || frame.s !== 'observed') return nextTrail
   const rect = containVideoRect(
     track.coordinateSpace.width,
@@ -106,7 +124,7 @@ const drawBall = (
   const points = nextTrail.points
   context.lineCap = 'round'
   context.lineJoin = 'round'
-  context.lineWidth = Math.max(1, 1.8 * rect.scale)
+  context.lineWidth = Math.max(0.6, settings.ballTrailLineWidth * rect.scale)
   for (let index = 1; index < points.length; index += 1) {
     const previous = points[index - 1]
     const current = points[index]
@@ -129,31 +147,13 @@ const drawBall = (
   context.arc(
     rect.x + marker.x * rect.scale,
     rect.y + marker.y * rect.scale,
-    Math.max(2.5, marker.radius * rect.scale),
+    Math.max(1.5, marker.radius * settings.ballMarkerScale * rect.scale),
     0,
     Math.PI * 2,
   )
   context.fill()
   context.stroke()
   return nextTrail
-}
-
-const drawCoaching = (
-  context: CanvasRenderingContext2D,
-  analysis: AnalysisResult,
-) => {
-  const width = context.canvas.width
-  const height = context.canvas.height
-  const padding = Math.max(12, width * 0.018)
-  const boxHeight = Math.max(48, height * 0.1)
-  context.fillStyle = 'rgba(4, 14, 10, 0.82)'
-  context.fillRect(padding, height - boxHeight - padding, width - padding * 2, boxHeight)
-  context.fillStyle = '#f2f7f4'
-  context.font = `600 ${Math.max(12, width / 58)}px system-ui, sans-serif`
-  const cue = analysis.mainObservation.length > 100
-    ? `${analysis.mainObservation.slice(0, 97)}…`
-    : analysis.mainObservation
-  context.fillText(cue, padding * 1.5, height - boxHeight / 1.7, width - padding * 3)
 }
 
 export const renderCompositeOverlay = (
@@ -168,9 +168,14 @@ export const renderCompositeOverlay = (
     if (frame) drawPose(context, frame, input)
   }
   const trail = input.toggles.ball && input.ballTrack
-    ? drawBall(context, input.ballTrack, input.timestampMs, previousTrail)
+    ? drawBall(
+      context,
+      input.ballTrack,
+      input.timestampMs,
+      previousTrail,
+      input.settings,
+    )
     : resetBallTrail()
-  if (input.toggles.coaching && input.analysis) drawCoaching(context, input.analysis)
   return trail
 }
 

@@ -6,6 +6,14 @@ import {
   runVideoAnalysis,
   type VideoAnalysisOutput,
 } from './analysis/videoAnalysisPipeline'
+import {
+  canExportCombinedVideo,
+  exportCombinedVideo,
+} from './analysis/videoExport'
+
+const viewerProbe = vi.hoisted(() => ({
+  settings: undefined as unknown,
+}))
 
 vi.mock('./analysis/videoAnalysisPipeline', async () => {
   const actual = await vi.importActual<typeof import('./analysis/videoAnalysisPipeline')>(
@@ -19,6 +27,31 @@ vi.mock('./analysis/precomputedBallTrack', async () => {
     './analysis/precomputedBallTrack',
   )
   return { ...actual, loadPrecomputedBallTrack: vi.fn() }
+})
+
+vi.mock('./analysis/videoExport', async () => {
+  const actual = await vi.importActual<typeof import('./analysis/videoExport')>(
+    './analysis/videoExport',
+  )
+  return {
+    ...actual,
+    canExportCombinedVideo: vi.fn(),
+    exportCombinedVideo: vi.fn(),
+  }
+})
+
+vi.mock('./components/PoseViewer', async () => {
+  const actual = await vi.importActual<typeof import('./components/PoseViewer')>(
+    './components/PoseViewer',
+  )
+  const ActualPoseViewer = actual.PoseViewer
+  return {
+    ...actual,
+    PoseViewer: (props: Parameters<typeof ActualPoseViewer>[0]) => {
+      viewerProbe.settings = props.renderSettings
+      return <ActualPoseViewer {...props} />
+    },
+  }
 })
 
 const points = Array.from({ length: 33 }, (_, index) => ({
@@ -150,6 +183,11 @@ describe('progressive pose and ball review', () => {
       status: 'unavailable',
       message: 'No exact track.',
     })
+    vi.mocked(canExportCombinedVideo).mockReturnValue(true)
+    vi.mocked(exportCombinedVideo).mockResolvedValue({
+      blob: new Blob(['webm'], { type: 'video/webm' }),
+      mimeType: 'video/webm',
+    })
   })
 
   afterEach(() => vi.restoreAllMocks())
@@ -180,7 +218,7 @@ describe('progressive pose and ball review', () => {
     loadMetadata()
 
     expect(await screen.findByText(/Body pose: 2 frames processed/)).toBeInTheDocument()
-    expect(screen.getByLabelText('Body, ball, and coaching overlay')).toBeInTheDocument()
+    expect(screen.getByLabelText('Body and ball overlay')).toBeInTheDocument()
 
     await act(async () => finish?.(output))
     expect(await screen.findByText(/Body pose and coaching analysis ready/)).toBeInTheDocument()
@@ -246,5 +284,58 @@ describe('progressive pose and ball review', () => {
     upload()
     view.unmount()
     expect(URL.revokeObjectURL).toHaveBeenCalledTimes(2)
+  })
+
+  it('uses one live settings object for both the viewer and export', async () => {
+    vi.mocked(loadPrecomputedBallTrack).mockResolvedValueOnce({
+      status: 'available',
+      track: {
+        schemaVersion: 'precomputed-ball-track.v1',
+        sourceSha256: 'a'.repeat(64),
+        coordinateSpace: {
+          kind: 'intrinsic-source-pixels',
+          origin: 'top-left',
+          xDirection: 'right',
+          yDirection: 'down',
+          width: 1280,
+          height: 720,
+        },
+        timeline: {
+          frameIndexOrigin: 0,
+          timestampRule: 'frameIndex * 1000 / sourceFps',
+          fps: 2,
+          frameCount: 1,
+          durationMs: 4000,
+        },
+        frames: [{ i: 0, t: 0, s: 'observed', x: 500, y: 300 }],
+      },
+      entry: {} as never,
+      cacheIdentity: 'settings-test',
+      message: 'available',
+    })
+    render(<App />)
+    upload()
+    loadMetadata()
+    await screen.findByText(/Ball tracking ready from exact-hash precomputed cache/)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Analysis settings' }))
+    const markerSlider = screen.getByLabelText('Ball marker size multiplier')
+    const trailSlider = screen.getByLabelText('Ball trail length (points)')
+    await act(async () => {
+      fireEvent.input(markerSlider, { target: { value: '1.7' } })
+      fireEvent.input(trailSlider, { target: { value: '24' } })
+    })
+    await waitFor(() => {
+      expect(markerSlider.parentElement?.querySelector('output')).toHaveTextContent('1.7')
+      expect(trailSlider.parentElement?.querySelector('output')).toHaveTextContent('24')
+    })
+
+    fireEvent.click(screen.getByLabelText('Body'))
+    fireEvent.click(screen.getByRole('button', { name: 'Download enabled overlays (.webm)' }))
+    await waitFor(() => expect(exportCombinedVideo).toHaveBeenCalledOnce())
+    expect(vi.mocked(exportCombinedVideo).mock.calls[0][0].overlay.settings)
+      .toBe(viewerProbe.settings)
+    expect(screen.queryByText('Coaching labels')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Playback is ahead of analyzed evidence/i)).not.toBeInTheDocument()
   })
 })

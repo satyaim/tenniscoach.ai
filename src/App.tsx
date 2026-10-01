@@ -14,7 +14,11 @@ import {
   observationsToBallTrack,
   runLocalBallProvider,
 } from './analysis/localBallProvider'
-import type { OverlayToggles } from './analysis/compositeRenderer'
+import {
+  DEFAULT_COMPOSITE_RENDER_SETTINGS,
+  type CompositeRenderSettings,
+  type OverlayToggles,
+} from './analysis/compositeRenderer'
 import {
   clearPrecomputedBallTrackCache,
   loadPrecomputedBallTrack,
@@ -111,8 +115,10 @@ export default function App() {
   const [toggles, setToggles] = useState<OverlayToggles>({
     body: true,
     ball: true,
-    coaching: true,
   })
+  const [renderSettings, setRenderSettings] = useState<CompositeRenderSettings>(
+    DEFAULT_COMPOSITE_RENDER_SETTINGS,
+  )
   const [stages, dispatch] = useReducer(stageReducer, initialStages)
   const [selectedInsightSegmentId, setSelectedInsightSegmentId] = useState<string>()
   const [shotInsightStates, setShotInsightStates] = useState<Record<string, {
@@ -431,12 +437,6 @@ export default function App() {
   const poseOutput = stages.pose.result
   const poseFrames = poseOutput?.filteredFrames ?? stages.pose.partialResult ?? []
   const ballTrack = stages.ball.result?.track ?? stages.ball.partialResult
-  const enabledHorizons = [
-    toggles.body ? poseFrames.at(-1)?.timestampMs ?? 0 : undefined,
-    toggles.ball ? ballTrack?.frames.at(-1)?.t ?? 0 : undefined,
-    toggles.coaching ? (poseOutput ? source?.durationMs ?? 0 : 0) : undefined,
-  ].filter((value): value is number => value !== undefined)
-  const analyzedHorizonMs = enabledHorizons.length ? Math.min(...enabledHorizons) : undefined
   const shotSegments = useMemo(
     () => shotSegmentsWithBallEvidence(poseOutput?.segments ?? [], ballTrack),
     [ballTrack, poseOutput?.segments],
@@ -498,9 +498,8 @@ export default function App() {
 
   const exportReady =
     (!toggles.body || stages.pose.status === 'ready')
-    && (!toggles.coaching || stages.pose.status === 'ready')
     && (!toggles.ball || stages.ball.status === 'ready')
-    && (toggles.body || toggles.ball || toggles.coaching)
+    && (toggles.body || toggles.ball)
 
   const downloadCombinedVideo = async () => {
     const canvas = exportCanvasRef.current
@@ -530,8 +529,8 @@ export default function App() {
           sourceHeight: source.height,
           poseFrames,
           ballTrack,
-          analysis: poseOutput?.result,
           toggles,
+          settings: renderSettings,
           playerLabel: poseOutput ? `Player ${poseOutput.selectedPlayerId}` : undefined,
         },
         fps: ballTrack?.timeline.fps ?? poseFps,
@@ -616,8 +615,44 @@ export default function App() {
         )}
         {settingsOpen && (
           <aside className="settings-panel" aria-label="Analysis settings panel">
-            <strong>Analysis settings</strong>
-            <p>Pose and ball run independently. Local ball inference is used only when explicitly configured.</p>
+            <div className="settings-heading">
+              <strong>Overlay settings</strong>
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => setRenderSettings(DEFAULT_COMPOSITE_RENDER_SETTINGS)}
+              >
+                Reset
+              </button>
+            </div>
+            {([
+              ['ballMarkerScale', 'Ball marker size multiplier', 0.5, 3, 0.1, '×'],
+              ['ballTrailLineWidth', 'Ball trail width', 0.6, 5, 0.1, 'px'],
+              ['ballTrailMaxPoints', 'Ball trail length (points)', 2, 36, 1, 'points'],
+              ['bodyLineWidth', 'Body line width', 0.6, 5, 0.1, 'px'],
+              ['bodyJointRadius', 'Body joint size', 0.8, 6, 0.1, 'px'],
+            ] as const).map(([key, label, min, max, step, unit]) => (
+              <label className="settings-slider" key={key}>
+                <span>
+                  {label}
+                  <output>
+                    {renderSettings[key].toFixed(step === 1 ? 0 : 1)} {unit}
+                  </output>
+                </span>
+                <input
+                  id={`setting-${key}`}
+                  type="range"
+                  min={min}
+                  max={max}
+                  step={step}
+                  value={renderSettings[key]}
+                  onChange={(event) => setRenderSettings((current) => ({
+                    ...current,
+                    [key]: Number(event.target.value),
+                  }))}
+                />
+              </label>
+            ))}
             <button type="button" className="text-button" onClick={() => void clearCache()}>
               Clear local analysis cache
             </button>
@@ -667,8 +702,7 @@ export default function App() {
             shotPlayerLabel={poseOutput ? `Player ${poseOutput.selectedPlayerId}` : undefined}
             onShotSelect={selectShot}
             toggles={toggles}
-            analysis={poseOutput?.result}
-            analyzedHorizonMs={analyzedHorizonMs}
+            renderSettings={renderSettings}
           />
 
           <fieldset className="overlay-toggles">
@@ -676,7 +710,6 @@ export default function App() {
             {([
               ['body', 'Body'],
               ['ball', 'Ball'],
-              ['coaching', 'Coaching labels'],
             ] as const).map(([key, label]) => (
               <label key={key}>
                 <input

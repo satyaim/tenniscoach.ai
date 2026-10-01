@@ -80,13 +80,42 @@ input:focus-visible + * {
   right: 0;
   display: grid;
   gap: 14px;
-  width: min(340px, calc(100vw - 40px));
+  width: min(380px, calc(100vw - 40px));
   padding: 18px;
   text-align: left;
   background: rgba(7, 17, 14, 0.98);
   border: 1px solid rgba(181, 255, 208, 0.28);
   border-radius: 16px;
   box-shadow: 0 20px 70px rgba(0, 0, 0, 0.45);
+}
+
+.settings-heading,
+.settings-slider > span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-heading .text-button {
+  padding: 5px 9px;
+}
+
+.settings-slider {
+  display: grid;
+  gap: 7px;
+  color: #dce9e2;
+  font-size: 0.8rem;
+}
+
+.settings-slider output {
+  color: #8fe9ac;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-slider input {
+  width: 100%;
+  accent-color: #78e9a3;
 }
 
 .settings-panel p,
@@ -194,20 +223,6 @@ input:focus-visible + * {
   height: 100%;
   pointer-events: none;
   z-index: 2;
-}
-
-.evidence-horizon {
-  position: absolute;
-  right: 14px;
-  bottom: 18px;
-  z-index: 6;
-  padding: 7px 10px;
-  color: #ffe1a5;
-  font-size: 0.74rem;
-  background: rgba(44, 29, 4, 0.88);
-  border: 1px solid rgba(255, 199, 102, 0.5);
-  border-radius: 999px;
-  pointer-events: none;
 }
 
 .review-view {

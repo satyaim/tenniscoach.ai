@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { resetBallTrail } from '../analysis/ballOverlayModel'
+import { ballTrailTrackIdentity, resetBallTrail } from '../analysis/ballOverlayModel'
 import {
+  DEFAULT_COMPOSITE_RENDER_SETTINGS,
   renderCompositeOverlay,
+  type CompositeRenderSettings,
   type OverlayToggles,
 } from '../analysis/compositeRenderer'
 import type { PrecomputedBallTrack } from '../analysis/precomputedBallTrack'
-import type { AnalysisResult, PoseFrame, StrokeSegment } from '../analysis/types'
+import type { PoseFrame, StrokeSegment } from '../analysis/types'
 import { ShotProgressRail } from './ShotSegments'
 import { videoStageStyle } from './videoStage'
 
@@ -28,14 +30,12 @@ interface PoseViewerProps {
   shotPlayerLabel?: string
   onShotSelect?: (segment: StrokeSegment) => void
   toggles?: OverlayToggles
-  analysis?: AnalysisResult
-  analyzedHorizonMs?: number
+  renderSettings?: CompositeRenderSettings
 }
 
 const defaultToggles: OverlayToggles = {
   body: true,
   ball: true,
-  coaching: true,
 }
 
 export function PoseViewer({
@@ -55,18 +55,19 @@ export function PoseViewer({
   shotPlayerLabel,
   onShotSelect,
   toggles = defaultToggles,
-  analysis,
-  analyzedHorizonMs,
+  renderSettings = DEFAULT_COMPOSITE_RENDER_SETTINGS,
 }: PoseViewerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const trailRef = useRef(resetBallTrail())
   const [presentedTimestampMs, setPresentedTimestampMs] = useState(0)
 
+  const ballTrackIdentity = ballTrailTrackIdentity(ballTrack)
+
   useEffect(() => {
     trailRef.current = resetBallTrail()
     setPresentedTimestampMs(0)
-  }, [videoUrl, ballTrack])
+  }, [videoUrl, ballTrackIdentity])
 
   useEffect(() => {
     const video = videoRef.current
@@ -107,8 +108,8 @@ export function PoseViewer({
         sourceHeight: intrinsicHeight,
         poseFrames: renderFrames,
         ballTrack,
-        analysis,
         toggles,
+        settings: renderSettings,
         playerLabel: primaryPlayerLabel,
       }, trailRef.current)
     }
@@ -121,7 +122,6 @@ export function PoseViewer({
       window.removeEventListener('resize', draw)
     }
   }, [
-    analysis,
     ballTrack,
     frame,
     frames,
@@ -129,6 +129,7 @@ export function PoseViewer({
     intrinsicWidth,
     presentedTimestampMs,
     primaryPlayerLabel,
+    renderSettings,
     toggles,
   ])
 
@@ -144,9 +145,6 @@ export function PoseViewer({
     setPresentedTimestampMs(segment.onsetMs)
     onTimeUpdate?.(segment.onsetMs)
   }
-
-  const aheadOfEvidence = analyzedHorizonMs !== undefined
-    && presentedTimestampMs > analyzedHorizonMs + 180
 
   return (
     <div
@@ -181,7 +179,7 @@ export function PoseViewer({
         ref={canvasRef}
         className="composite-overlay"
         role="img"
-        aria-label="Body, ball, and coaching overlay"
+        aria-label="Body and ball overlay"
       />
       <ShotProgressRail
         segments={shotSegments}
@@ -195,11 +193,6 @@ export function PoseViewer({
         onSelect={selectShot}
         playerLabel={shotPlayerLabel}
       />
-      {aheadOfEvidence && (
-        <div className="evidence-horizon" role="status">
-          Playback is ahead of analyzed evidence ({(analyzedHorizonMs! / 1000).toFixed(1)}s).
-        </div>
-      )}
       {showBadge && (
         <div className="viewer-badge">
           <span className="live-dot" />

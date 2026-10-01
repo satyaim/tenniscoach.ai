@@ -70,6 +70,35 @@ describe('ball overlay synchronization and trail', () => {
     ).points).toHaveLength(1)
   })
 
+  it('retains the connected trail when multiple presented frames resolve to the same observation', () => {
+    let state = updateBallTrail(resetBallTrail(), track.frames[0], track)
+    state = updateBallTrail(state, track.frames[1], track)
+    const repeated = updateBallTrail(state, track.frames[1], track)
+
+    expect(repeated).toBe(state)
+    expect(repeated.points).toHaveLength(2)
+    expect(repeated.points.map(({ timestampMs }) => timestampMs)).toEqual([0, 100])
+  })
+
+  it('applies a safe configurable point cap without interpolating', () => {
+    const longTrack = {
+      ...track,
+      timeline: { ...track.timeline, fps: 60, frameCount: 60, durationMs: 1000 },
+    }
+    let state = resetBallTrail()
+    for (let index = 0; index < 12; index += 1) {
+      state = updateBallTrail(state, {
+        i: index,
+        t: index * 1000 / 60,
+        s: 'observed',
+        x: index,
+        y: index,
+      }, longTrack, { maxPoints: 5 })
+    }
+    expect(state.points).toHaveLength(5)
+    expect(state.points.map(({ x }) => x)).toEqual([7, 8, 9, 10, 11])
+  })
+
   it('bounds the trail to 18 observed points and 650 milliseconds', () => {
     const longTrack = {
       ...track,
@@ -90,4 +119,3 @@ describe('ball overlay synchronization and trail', () => {
       (state.lastTimestampMs ?? 0) - point.timestampMs <= 650)).toBe(true)
   })
 })
-

@@ -196,9 +196,20 @@ For an exact verified known source, a separate canvas selects the canonical
 BallTrack frame by source timeline and renders only `observed` coordinates.
 `ambiguous` and `abstained` states contain no coordinate and clear the trail.
 The marker uses emitted component radius plus 1.5 source pixels, clamped to
-3–18 source pixels; when the optional genuine radius is absent, a conservative
-6-source-pixel visualization-only radius is used. The trail contains at most 18
-raw observed points and 650 ms, fades older segments, and resets on any
-non-observed state, seek, replacement, backwards/large timestamp discontinuity,
-or a large-distance safeguard. It performs no smoothing, interpolation, repair,
+3–18 source pixels before the user-selected marker multiplier; when the
+optional genuine radius is absent, a conservative 6-source-pixel
+visualization-only radius is used. The trail defaults to at most 18 raw
+observed points and 650 ms, with a safe user cap of 36 points. It fades older
+segments and resets on any non-observed state, seek, source replacement,
+backwards/large timestamp discontinuity, or a large-distance safeguard.
+Repeated presented frames that resolve to the same observation preserve the
+trail, and compatible partial/final local-provider track replacements preserve
+the trail identity. It performs no smoothing, interpolation, repair,
 prediction, contact detection, or outcome inference.
+
+The review settings popover owns one `CompositeRenderSettings` object for ball
+marker scale, trail width/length, pose line width, and joint size. The visible
+viewer and hidden export receive that same object, so customization cannot
+diverge between playback and downloaded WebM. Coaching remains below the video;
+no evidence-quality or coaching warning banner is rendered over the player or
+burned into export.

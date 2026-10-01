@@ -34,7 +34,13 @@ movement observations linked to visible pose evidence.
 - **Observed-only ball visualization:** accepted BallTrack observations are
   drawn as a green marker with a short raw-observation trail. Ambiguous and
   abstained frames render no coordinate and reset the trail. There is no
-  interpolation.
+  interpolation. Repeated browser presentation callbacks for the same ball
+  observation retain the existing trail, and progressive/final updates for the
+  same source continue one trail instead of resetting it.
+- **Live overlay styling:** the review-page gear opens accessible sliders for
+  ball marker scale, ball trail width and point count, body line width, and body
+  joint size. Defaults preserve the thin cyan pose and compact green observed
+  ball style. The same settings object drives onscreen and WebM rendering.
 - **Optional private/local ball provider:** unknown videos can be sent only to
   an explicitly configured same-origin or loopback endpoint. The public build
   has no endpoint and fails closed as unavailable. The unresolved RacketVision
@@ -43,6 +49,7 @@ movement observations linked to visible pose evidence.
   by the same composite renderer used onscreen. Current Chrome/Edge can combine
   the canvas video with source audio exposed by media capture/Web Audio. Export
   uses a separate hidden video, reports progress, and never claims MP4 support.
+  Coaching/evidence warning banners are not burned into the video.
 - **Shot navigation when both signals exist:** pose-derived movement segments
   that overlap a direct observed ball coordinate appear as clickable ranges on
   the video timeline and as a compact shot list below the replay. Provisional
